@@ -1,9 +1,6 @@
 import 'dotenv/config';
-import { createRequire } from 'node:module';
+import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-
-const require = createRequire(import.meta.url);
-const { PrismaClient } = require('../generated/prisma/index.js') as { PrismaClient: new (options: Record<string, unknown>) => unknown };
 
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL environment variable is not set');

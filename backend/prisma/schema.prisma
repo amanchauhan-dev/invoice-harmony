@@ -5,8 +5,7 @@
 
 // Agent: Do not touch this part
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
