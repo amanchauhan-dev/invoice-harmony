@@ -16,9 +16,13 @@ import {
   Layout,
   Eye,
   Info,
+  Loader2,
 } from "lucide-react";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiService, ApiInvoice } from "../services/api.service";
+import { toast } from "sonner";
 
 interface LineItem {
   id: string;
@@ -49,10 +53,11 @@ const formatCurrency = (amount: number) => {
 const CreateInvoice = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const queryClient = useQueryClient();
   const isEditing = !!id;
 
   const [form, setForm] = useState<InvoiceForm>({
-    invoiceNumber: id || `INV-${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`,
+    invoiceNumber: `INV-${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`,
     customerName: "",
     customerEmail: "",
     customerAddress: "",
@@ -61,6 +66,29 @@ const CreateInvoice = () => {
     items: [{ id: crypto.randomUUID(), description: "", quantity: 1, rate: 0 }],
     notes: "",
     status: "Draft",
+  });
+
+  const { isLoading: isLoadingInvoice } = useQuery({
+    queryKey: ['invoice', id],
+    queryFn: async () => {
+      const inv = await apiService.getInvoice(id!);
+      setForm({
+        invoiceNumber: inv.invoiceNumber,
+        customerName: inv.customerName,
+        customerEmail: inv.customerEmail || "",
+        customerAddress: inv.customerAddress || "",
+        issueDate: new Date(inv.issueDate).toISOString().split("T")[0],
+        dueDate: new Date(inv.dueDate).toISOString().split("T")[0],
+        items: inv.items.map((it: { id?: string; description: string; quantity: number; rate: number }) => ({ 
+          ...it, 
+          id: it.id || crypto.randomUUID() 
+        })),
+        notes: inv.notes || "",
+        status: inv.status as "Draft" | "Sent" | "Paid",
+      });
+      return inv;
+    },
+    enabled: isEditing,
   });
 
   const subtotal = useMemo(() => {
@@ -97,9 +125,42 @@ const CreateInvoice = () => {
     }));
   };
 
-  const handleSave = () => {
-    console.log("Saving invoice:", form);
-    navigate("/invoices");
+  const saveMutation = useMutation({
+    mutationFn: (payload: Partial<ApiInvoice>) => {
+      if (isEditing) {
+        // Assume update logic exists or just show a warning
+        // return apiService.updateInvoice(id!, payload);
+        throw new Error("Updating invoices is not yet implemented.");
+      }
+      return apiService.createInvoice(payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast.success(isEditing ? "Invoice updated" : "Invoice created successfully");
+      navigate("/invoices");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to save invoice");
+    }
+  });
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.customerName || !form.customerEmail) {
+      toast.error("Customer name and email are required");
+      return;
+    }
+    
+    const payload = {
+      ...form,
+      subtotal,
+      tax,
+      totalAmount: total,
+      // Backend expects items without ephemeral id
+      items: form.items.map(({ id, ...rest }) => rest)
+    };
+
+    saveMutation.mutate(payload);
   };
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -109,10 +170,7 @@ const CreateInvoice = () => {
     const obs = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const w = entry.contentRect.width;
-        // Ignore zero-width hidden states to not squash the invoice completely
         if (w > 0) {
-          // 800px is the fixed design width of the invoice paper.
-          // 40px safe padding on sides.
           const newScale = Math.min(1, Math.max(0.2, (w - 40) / 800));
           setScale(newScale);
         }
@@ -138,9 +196,10 @@ const CreateInvoice = () => {
                 <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
                 <input
                   type="text"
+                  readOnly={isEditing}
                   value={form.invoiceNumber}
                   onChange={(e) => setForm({ ...form, invoiceNumber: e.target.value })}
-                  className="w-full rounded-xl border-0 bg-card py-2 pl-9 pr-3 text-sm font-bold text-foreground shadow-clay-sm outline-none focus:ring-2 focus:ring-accent/20"
+                  className={`w-full rounded-xl border-0 bg-card py-2 pl-9 pr-3 text-sm font-bold text-foreground shadow-clay-sm outline-none focus:ring-2 focus:ring-accent/20 ${isEditing ? 'opacity-50 cursor-not-allowed' : ''}`}
                 />
               </div>
             </div>
@@ -179,6 +238,7 @@ const CreateInvoice = () => {
               <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Customer Name</label>
               <input
                 type="text"
+                required
                 placeholder="Enter full name"
                 value={form.customerName}
                 onChange={(e) => setForm({ ...form, customerName: e.target.value })}
@@ -189,6 +249,7 @@ const CreateInvoice = () => {
               <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Email Address</label>
               <input
                 type="email"
+                required
                 placeholder="customer@company.com"
                 value={form.customerEmail}
                 onChange={(e) => setForm({ ...form, customerEmail: e.target.value })}
@@ -325,12 +386,10 @@ const CreateInvoice = () => {
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
                 <Building2 className="h-6 w-6" />
               </div>
-              <span className="text-2xl font-black uppercase tracking-tight text-primary">InvoicePro</span>
+              <span className="text-2xl font-black uppercase tracking-tight text-primary">InvoiceHarmony</span>
             </div>
             <div className="text-sm font-medium text-gray-400">
-              <p>InvoicePro Solutions Inc.</p>
-              <p>123 Business Avenue, Suite 400</p>
-              <p>San Francisco, CA 94107</p>
+              <p>InvoiceHarmony Solutions Inc.</p>
             </div>
           </div>
           <div className="text-right">
@@ -339,12 +398,7 @@ const CreateInvoice = () => {
             </h1>
             <div className="mt-4 space-y-1">
               <p className="text-[10px] font-black uppercase tracking-widest text-gray-300">Invoice Number</p>
-              <input
-                type="text"
-                value={form.invoiceNumber}
-                onChange={(e) => setForm({ ...form, invoiceNumber: e.target.value })}
-                className="w-32 rounded-lg border-none bg-gray-50/50 px-2 py-1 text-right text-xl font-bold text-black outline-none transition-colors hover:bg-gray-50 focus:ring-0"
-              />
+              <p className="text-right text-xl font-bold text-black">{form.invoiceNumber}</p>
             </div>
           </div>
         </div>
@@ -355,54 +409,28 @@ const CreateInvoice = () => {
             <div className="space-y-4">
               <h2 className="text-xs font-black uppercase tracking-widest text-primary">Bill To</h2>
               <div className="space-y-3">
-                <input
-                  type="text"
-                  placeholder="Enter customer name..."
-                  value={form.customerName}
-                  onChange={(e) => setForm({ ...form, customerName: e.target.value })}
-                  className="w-full rounded border-none bg-transparent p-0 text-lg font-bold text-black outline-none transition-colors placeholder:text-gray-200 hover:bg-gray-50/50 focus:ring-0"
-                />
+                <p className="text-lg font-bold text-black">{form.customerName || 'Customer Name'}</p>
                 <div className="flex items-center gap-2 text-sm text-gray-400">
                   <Mail className="h-3.5 w-3.5" />
-                  <input
-                    type="email"
-                    placeholder="customer@email.com"
-                    value={form.customerEmail}
-                    onChange={(e) => setForm({ ...form, customerEmail: e.target.value })}
-                    className="flex-grow border-none bg-transparent p-0 text-gray-500 outline-none placeholder:text-gray-200 focus:ring-0"
-                  />
+                  <span>{form.customerEmail || 'customer@email.com'}</span>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-gray-400">
-                  <MapPin className="h-3.5 w-3.5" />
-                  <input
-                    type="text"
-                    placeholder="Customer address..."
-                    value={form.customerAddress}
-                    onChange={(e) => setForm({ ...form, customerAddress: e.target.value })}
-                    className="flex-grow border-none bg-transparent p-0 text-gray-500 outline-none placeholder:text-gray-200 focus:ring-0"
-                  />
-                </div>
+                {form.customerAddress && (
+                  <div className="flex items-center gap-2 text-sm text-gray-400">
+                    <MapPin className="h-3.5 w-3.5" />
+                    <span>{form.customerAddress}</span>
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-x-4 gap-y-6 text-right">
               <div className="space-y-1">
                 <p className="text-[10px] font-black uppercase tracking-widest text-gray-300">Issue Date</p>
-                <input
-                  type="date"
-                  value={form.issueDate}
-                  onChange={(e) => setForm({ ...form, issueDate: e.target.value })}
-                  className="w-full border-none bg-transparent p-0 text-right text-sm font-bold text-black outline-none focus:ring-0"
-                />
+                <p className="text-right text-sm font-bold text-black">{formatCurrency ? form.issueDate : ''}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-[10px] font-black uppercase tracking-widest text-gray-300">Due Date</p>
-                <input
-                  type="date"
-                  value={form.dueDate}
-                  onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
-                  className="w-full border-none bg-transparent p-0 text-right text-sm font-bold text-black outline-none focus:ring-0"
-                />
+                <p className="text-right text-sm font-bold text-black">{form.dueDate}</p>
               </div>
               <div className="col-span-2 space-y-1">
                 <p className="text-[10px] font-black uppercase tracking-widest text-gray-300">Balance Due</p>
@@ -423,34 +451,12 @@ const CreateInvoice = () => {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {form.items.map((item) => (
-                  <tr key={item.id} className="transition-colors hover:bg-gray-50/50">
+                  <tr key={item.id}>
                     <td className="py-5 pr-4">
-                      <input
-                        type="text"
-                        placeholder="Description..."
-                        value={item.description}
-                        onChange={(e) => handleItemChange(item.id, "description", e.target.value)}
-                        className="w-full border-none bg-transparent p-0 font-bold text-gray-800 outline-none placeholder:text-gray-200 focus:ring-0"
-                      />
+                      <p className="font-bold text-gray-800">{item.description || 'Service/Product'}</p>
                     </td>
-                    <td className="py-5 text-center">
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) => handleItemChange(item.id, "quantity", Number(e.target.value))}
-                        className="w-full border-none bg-transparent p-0 text-center font-medium text-gray-600 outline-none focus:ring-0"
-                      />
-                    </td>
-                    <td className="py-5 text-right">
-                      <input
-                        type="number"
-                        min="0"
-                        value={item.rate}
-                        onChange={(e) => handleItemChange(item.id, "rate", Number(e.target.value))}
-                        className="w-full border-none bg-transparent p-0 text-right font-medium text-gray-600 outline-none focus:ring-0"
-                      />
-                    </td>
+                    <td className="py-5 text-center text-gray-600 font-medium">{item.quantity}</td>
+                    <td className="py-5 text-right text-gray-600 font-medium">${item.rate.toFixed(2)}</td>
                     <td className="tabular-nums py-5 text-right font-bold text-gray-800">
                       {formatCurrency(item.quantity * item.rate)}
                     </td>
@@ -463,12 +469,7 @@ const CreateInvoice = () => {
           <div className="grid grid-cols-2 gap-12 border-t-2 border-gray-100 pt-10">
             <div className="space-y-4">
               <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-300">Notes & Terms</h3>
-              <textarea
-                placeholder="Add text..."
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                className="h-24 w-full resize-none border-none bg-transparent p-0 text-xs text-gray-500 outline-none placeholder:text-gray-200 focus:ring-0"
-              />
+              <p className="text-xs text-gray-500 line-clamp-4">{form.notes || 'N/A'}</p>
             </div>
             <div className="space-y-4">
               <div className="flex justify-between text-xs">
@@ -486,15 +487,17 @@ const CreateInvoice = () => {
             </div>
           </div>
         </div>
-
-        <div className="bg-gray-50/50 p-8 text-center">
-          <p className="text-[9px] font-bold uppercase tracking-widest text-gray-300">
-            Generated with InvoicePro - Professional Billing
-          </p>
-        </div>
       </div>
     </div>
   );
+
+  if (isLoadingInvoice) {
+    return (
+      <div className="flex h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-accent" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] sm:h-[calc(100vh-80px)] lg:h-[calc(100vh-64px)] overflow-hidden bg-background -m-4 sm:-m-6 lg:-m-8">
@@ -508,27 +511,21 @@ const CreateInvoice = () => {
           </button>
           <div>
             <h1 className="text-xs font-bold text-foreground sm:text-sm">
-              {isEditing ? `Edit Invoice ${id}` : "Create New Invoice"}
+              {isEditing ? `Edit Invoice` : "Create New Invoice"}
             </h1>
-            <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground sm:text-[10px]">InvoicePro Builder</p>
+            <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground sm:text-[10px]">InvoiceHarmony Builder</p>
           </div>
         </div>
         
         <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={handleSave}
-            className="hidden items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-xs font-bold text-foreground shadow-clay-sm transition-all hover:shadow-clay sm:flex"
+            disabled={saveMutation.isPending}
+            className="flex items-center gap-2 rounded-xl bg-accent px-4 sm:px-5 py-2 text-xs font-bold text-accent-foreground shadow-clay-sm transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
           >
-            <Save className="h-3.5 w-3.5 text-accent" />
-            Save Draft
-          </button>
-          <button
-            onClick={handleSave}
-            className="flex items-center gap-2 rounded-xl bg-accent px-4 sm:px-5 py-2 text-xs font-bold text-accent-foreground shadow-clay-sm transition-all hover:opacity-90 active:scale-95"
-          >
-            <Send className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{isEditing ? "Update & Close" : "Submit Invoice"}</span>
-            <span className="sm:hidden">Submit</span>
+            {saveMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            <span className="hidden sm:inline">{isEditing ? "Update Invoice" : "Submit Invoice"}</span>
+            <span className="sm:hidden">{isEditing ? "Update" : "Submit"}</span>
           </button>
         </div>
       </div>

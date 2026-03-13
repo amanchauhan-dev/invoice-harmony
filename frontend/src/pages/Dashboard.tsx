@@ -7,36 +7,56 @@ import {
   TrendingUp,
   ArrowUpRight,
   ArrowDownRight,
+  Loader2,
 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
+import { format } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
+import { apiService, ApiDashboardOverview } from "../services/api.service";
+import { useAuth } from "../context/AuthContext";
 
-const stats = [
-  { label: "Total Revenue", value: "$48,250.00", change: "+12.5%", up: true, icon: DollarSign, color: "bg-accent/10 text-accent" },
-  { label: "Total Invoices", value: "156", change: "+8.2%", up: true, icon: FileText, color: "bg-success/10 text-success" },
-  { label: "Pending Payments", value: "$12,430.00", change: "-3.1%", up: false, icon: Clock, color: "bg-warning/10 text-warning" },
-  { label: "Active Customers", value: "32", change: "+5.7%", up: true, icon: Users, color: "bg-primary/10 text-primary" },
-];
-
-const recentInvoices = [
-  { id: "INV-001", customer: "Acme Corp", amount: "$2,500.00", status: "Paid", date: "Mar 12, 2026" },
-  { id: "INV-002", customer: "TechStart Inc", amount: "$1,800.00", status: "Sent", date: "Mar 11, 2026" },
-  { id: "INV-003", customer: "Design Studio", amount: "$3,200.00", status: "Overdue", date: "Mar 05, 2026" },
-  { id: "INV-004", customer: "Cloud Nine LLC", amount: "$950.00", status: "Draft", date: "Mar 13, 2026" },
-  { id: "INV-005", customer: "GreenLeaf Co", amount: "$4,100.00", status: "Paid", date: "Mar 10, 2026" },
-];
-
-const statusStyles: Record<string, string> = {
-  Paid: "bg-success/10 text-success",
-  Sent: "bg-accent/10 text-accent",
-  Overdue: "bg-destructive/10 text-destructive",
-  Draft: "bg-muted text-muted-foreground",
+const formatCurrency = (amount: number, currency: string = "USD") => {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
 };
 
 const Dashboard = () => {
+  const { user } = useAuth();
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['dashboard'],
+    queryFn: () => apiService.getDashboardOverview(),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-accent" />
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="rounded-2xl bg-destructive/10 p-6 text-center text-destructive">
+        Failed to load dashboard data.
+      </div>
+    );
+  }
+
+  const overview = data.overview;
+  const recentInvoices = data.recentInvoices;
+
+  const stats = [
+    { label: "Total Revenue", value: formatCurrency(overview.totalRevenue, overview.currency), change: "+12.5%", up: true, icon: DollarSign, color: "bg-accent/10 text-accent" },
+    { label: "Total Invoices", value: overview.totalInvoices.toString(), change: "+8.2%", up: true, icon: FileText, color: "bg-success/10 text-success" },
+    { label: "Pending Payments", value: formatCurrency(overview.pendingPayments, overview.currency), change: "-3.1%", up: false, icon: Clock, color: "bg-warning/10 text-warning" },
+    { label: "Active Customers", value: overview.activeCustomers.toString(), change: "+5.7%", up: true, icon: Users, color: "bg-primary/10 text-primary" },
+  ];
+
   return (
     <div className="space-y-4 sm:space-y-6 lg:space-y-8">
       <div>
         <h1 className="font-heading text-xl font-bold text-foreground sm:text-2xl lg:text-3xl">Dashboard</h1>
-        <p className="mt-0.5 text-xs text-muted-foreground sm:mt-1 sm:text-sm">Welcome back, John. Here's your financial overview.</p>
+        <p className="mt-0.5 text-xs text-muted-foreground sm:mt-1 sm:text-sm">Welcome back, {user?.name}. Here's your financial overview.</p>
       </div>
 
       {/* Stats */}
@@ -86,17 +106,20 @@ const Dashboard = () => {
           <div className="divide-y divide-border/50 md:hidden">
             {recentInvoices.map((inv) => (
               <div key={inv.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-accent">{inv.id}</p>
-                  <p className="truncate text-sm font-medium text-foreground">{inv.customer}</p>
-                  <p className="text-[11px] text-muted-foreground">{inv.date}</p>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  <p className="text-sm font-semibold text-foreground">{inv.amount}</p>
-                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusStyles[inv.status]}`}>
-                    {inv.status}
-                  </span>
-                </div>
+                  <div className="flex flex-col gap-0.5 sm:gap-1">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <span className="font-semibold text-foreground text-sm sm:text-base">{inv.invoiceNumber}</span>
+                      <span className={`inline-flex items-center rounded-full px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${statusStyles[inv.status] || statusStyles.Draft}`}>{inv.status}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs sm:text-sm font-medium text-muted-foreground">{typeof inv.customer === 'object' && inv.customer ? inv.customer.name : 'Unknown'}</span>
+                      <span className="text-[10px] sm:text-xs text-muted-foreground">•</span>
+                      <span className="text-[10px] sm:text-xs text-muted-foreground">{format(new Date(inv.createdAt), "MMM dd, yyyy")}</span>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <p className="text-sm font-semibold text-foreground">{formatCurrency(inv.totalAmount, overview.currency)}</p>
+                  </div>
               </div>
             ))}
           </div>
@@ -116,15 +139,15 @@ const Dashboard = () => {
               <tbody>
                 {recentInvoices.map((inv) => (
                   <tr key={inv.id} className="border-t border-border/50 hover:bg-muted/30 transition-colors">
-                    <td className="px-6 py-3.5 font-medium text-foreground">{inv.id}</td>
-                    <td className="px-6 py-3.5 text-foreground">{inv.customer}</td>
-                    <td className="px-6 py-3.5 font-medium text-foreground">{inv.amount}</td>
+                    <td className="px-6 py-3.5 font-medium text-foreground">{inv.invoiceNumber}</td>
+                    <td className="px-6 py-3.5 text-foreground">{typeof inv.customer === 'object' && inv.customer ? inv.customer.name : 'Unknown'}</td>
+                    <td className="px-6 py-3.5 font-medium text-foreground">{formatCurrency(inv.totalAmount, overview.currency)}</td>
                     <td className="px-6 py-3.5">
-                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusStyles[inv.status]}`}>
+                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusStyles[inv.status] || statusStyles.Draft}`}>
                         {inv.status}
                       </span>
                     </td>
-                    <td className="px-6 py-3.5 text-muted-foreground">{inv.date}</td>
+                    <td className="px-6 py-3.5 text-muted-foreground">{format(new Date(inv.createdAt), "MMM dd, yyyy")}</td>
                   </tr>
                 ))}
               </tbody>
@@ -178,6 +201,13 @@ const Dashboard = () => {
       </div>
     </div>
   );
+};
+
+const statusStyles: Record<string, string> = {
+  Paid: "bg-success/10 text-success",
+  Sent: "bg-accent/10 text-accent",
+  Overdue: "bg-destructive/10 text-destructive",
+  Draft: "bg-muted text-muted-foreground",
 };
 
 export default Dashboard;

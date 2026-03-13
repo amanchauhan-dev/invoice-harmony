@@ -1,10 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
   Search,
-  Filter,
   MoreHorizontal,
   Eye,
   Pencil,
@@ -14,7 +13,7 @@ import {
   CheckCircle2,
   AlertCircle,
   FileDown,
-  Calendar,
+  Loader2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -26,75 +25,14 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiService, ApiInvoice } from "../services/api.service";
+import { toast } from "sonner";
+import { format } from "date-fns";
 
-// --- Types ---
-
-interface Invoice {
-  id: string;
-  customer: string;
-  amount: string;
-  status: "Paid" | "Sent" | "Overdue" | "Draft";
-  date: string;
-  due: string;
-}
-
-// --- Seed Data ---
-
-const seedInvoices: Invoice[] = [
-  {
-    id: "INV-001",
-    customer: "Acme Corp",
-    amount: "$2,500.00",
-    status: "Paid",
-    date: "Mar 12, 2026",
-    due: "Mar 26, 2026",
-  },
-  {
-    id: "INV-002",
-    customer: "TechStart Inc",
-    amount: "$1,800.00",
-    status: "Sent",
-    date: "Mar 11, 2026",
-    due: "Mar 25, 2026",
-  },
-  {
-    id: "INV-003",
-    customer: "Design Studio",
-    amount: "$3,200.00",
-    status: "Overdue",
-    date: "Mar 05, 2026",
-    due: "Mar 19, 2026",
-  },
-  {
-    id: "INV-004",
-    customer: "Cloud Nine LLC",
-    amount: "$950.00",
-    status: "Draft",
-    date: "Mar 13, 2026",
-    due: "Mar 27, 2026",
-  },
-  {
-    id: "INV-005",
-    customer: "GreenLeaf Co",
-    amount: "$4,100.00",
-    status: "Paid",
-    date: "Mar 10, 2026",
-    due: "Mar 24, 2026",
-  },
-  {
-    id: "INV-006",
-    customer: "Acme Corp",
-    amount: "$1,250.00",
-    status: "Sent",
-    date: "Mar 08, 2026",
-    due: "Mar 22, 2026",
-  },
-];
-
-const statusConfig = {
+const statusConfig: Record<string, any> = {
   Paid: {
     label: "Paid",
     icon: CheckCircle2,
@@ -113,23 +51,43 @@ const statusConfig = {
   },
 };
 
-const formatCurrency = (amount: string) => amount;
-
-// --- Component ---
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(amount);
+};
 
 const Invoices = () => {
   const navigate = useNavigate();
-  const [invoices, setInvoices] = useState<Invoice[]>(seedInvoices);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<string>("All");
+  const [deleteConfirm, setDeleteConfirm] = useState<ApiInvoice | null>(null);
 
-  const [deleteConfirm, setDeleteConfirm] = useState<Invoice | null>(null);
+  const { data: invoices = [], isLoading } = useQuery({
+    queryKey: ['invoices'],
+    queryFn: () => apiService.getInvoices(),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiService.deleteInvoice(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      setDeleteConfirm(null);
+      toast.success("Invoice removed");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to delete invoice");
+    }
+  });
+
 
   const filteredInvoices = useMemo(() => {
     return invoices.filter((inv) => {
       const matchesSearch =
-        inv.id.toLowerCase().includes(search.toLowerCase()) ||
-        inv.customer.toLowerCase().includes(search.toLowerCase());
+        inv.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
+        inv.customerName.toLowerCase().includes(search.toLowerCase());
       const matchesFilter = filter === "All" || inv.status === filter;
       return matchesSearch && matchesFilter;
     });
@@ -137,10 +95,17 @@ const Invoices = () => {
 
   const handleDelete = () => {
     if (deleteConfirm) {
-      setInvoices((prev) => prev.filter((inv) => inv.id !== deleteConfirm.id));
-      setDeleteConfirm(null);
+      deleteMutation.mutate(deleteConfirm.id);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-accent" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -164,7 +129,6 @@ const Invoices = () => {
         transition={{ duration: 0.35 }}
         className="rounded-3xl bg-card shadow-clay"
       >
-        {/* Filters & Search */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center px-6 py-5 border-b border-border/50">
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -194,28 +158,28 @@ const Invoices = () => {
           </div>
         </div>
 
-        {/* Mobile Card List (hidden on md+) */}
+        {/* Mobile List */}
         <div className="divide-y divide-border/50 md:hidden">
           {filteredInvoices.length === 0 ? (
             <p className="px-4 py-12 text-center text-sm text-muted-foreground">No invoices found.</p>
           ) : (
             filteredInvoices.map((inv) => {
-              const cfg = statusConfig[inv.status];
+              const cfg = statusConfig[inv.status] || statusConfig.Draft;
               const Icon = cfg.icon;
               return (
                 <div key={inv.id} className="flex items-center gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-bold text-accent">{inv.id}</p>
+                      <p className="text-xs font-bold text-accent">{inv.invoiceNumber}</p>
                       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${cfg.class}`}>
                         <Icon className="h-2.5 w-2.5" />
                         {inv.status}
                       </span>
                     </div>
-                    <p className="mt-0.5 truncate text-sm font-medium text-foreground">{inv.customer}</p>
+                    <p className="mt-0.5 truncate text-sm font-medium text-foreground">{inv.customerName}</p>
                     <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span>{inv.date}</span>
-                      <span className="font-semibold text-foreground">{inv.amount}</span>
+                      <span>{format(new Date(inv.issueDate), "MMM dd, yyyy")}</span>
+                      <span className="font-semibold text-foreground">{formatCurrency(inv.totalAmount)}</span>
                     </div>
                   </div>
                   <DropdownMenu>
@@ -231,12 +195,9 @@ const Invoices = () => {
                       <DropdownMenuItem className="gap-2.5 rounded-xl cursor-pointer py-2.5" onSelect={() => navigate(`/invoices/edit/${inv.id}`)}>
                         <Pencil className="h-4 w-4 text-muted-foreground" /> Edit Invoice
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="gap-2.5 rounded-xl cursor-pointer py-2.5">
-                        <FileDown className="h-4 w-4 text-muted-foreground" /> Download PDF
-                      </DropdownMenuItem>
                       <DropdownMenuSeparator className="bg-border/50" />
-                      <DropdownMenuItem className="gap-2.5 rounded-xl cursor-pointer py-2.5 text-destructive focus:bg-destructive/10 focus:text-destructive" onSelect={() => setDeleteConfirm(inv)}>
-                        <Trash2 className="h-4 w-4" /> Delete Permanent
+                      <DropdownMenuItem className="gap-2.5 rounded-xl cursor-pointer py-2.5 text-destructive" onSelect={() => setDeleteConfirm(inv)}>
+                        <Trash2 className="h-4 w-4" /> Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -246,7 +207,7 @@ const Invoices = () => {
           )}
         </div>
 
-        {/* Desktop table (hidden on mobile) */}
+        {/* Desktop Table */}
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
@@ -263,7 +224,8 @@ const Invoices = () => {
             <tbody>
               <AnimatePresence mode="popLayout">
                 {filteredInvoices.map((inv, i) => {
-                  const config = statusConfig[inv.status];
+                  const cfg = statusConfig[inv.status] || statusConfig.Draft;
+                  const Icon = cfg.icon;
                   return (
                     <motion.tr
                       key={inv.id}
@@ -273,17 +235,17 @@ const Invoices = () => {
                       transition={{ delay: i * 0.05 }}
                       className="group border-t border-border/50 hover:bg-muted/30 transition-colors"
                     >
-                      <td className="px-6 py-4 font-bold text-accent">{inv.id}</td>
-                      <td className="px-6 py-4 text-foreground font-medium">{inv.customer}</td>
-                      <td className="px-6 py-4 font-bold text-foreground">{inv.amount}</td>
+                      <td className="px-6 py-4 font-bold text-accent">{inv.invoiceNumber}</td>
+                      <td className="px-6 py-4 text-foreground font-medium">{inv.customerName}</td>
+                      <td className="px-6 py-4 font-bold text-foreground">{formatCurrency(inv.totalAmount)}</td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${statusConfig[inv.status].class}`}>
-                          {(() => { const Icon = statusConfig[inv.status].icon; return <Icon className="h-3 w-3" />; })()}
+                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${cfg.class}`}>
+                          <Icon className="h-3 w-3" />
                           {inv.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-muted-foreground">{inv.date}</td>
-                      <td className="px-6 py-4 text-muted-foreground">{inv.due}</td>
+                      <td className="px-6 py-4 text-muted-foreground">{format(new Date(inv.issueDate), "MMM dd, yyyy")}</td>
+                      <td className="px-6 py-4 text-muted-foreground">{format(new Date(inv.dueDate), "MMM dd, yyyy")}</td>
                       <td className="px-6 py-4 text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -298,12 +260,9 @@ const Invoices = () => {
                             <DropdownMenuItem className="gap-2.5 rounded-xl cursor-pointer py-2.5" onSelect={() => navigate(`/invoices/edit/${inv.id}`)}>
                               <Pencil className="h-4 w-4 text-muted-foreground" /> Edit Invoice
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="gap-2.5 rounded-xl cursor-pointer py-2.5">
-                              <FileDown className="h-4 w-4 text-muted-foreground" /> Download PDF
-                            </DropdownMenuItem>
                             <DropdownMenuSeparator className="bg-border/50" />
-                            <DropdownMenuItem className="gap-2.5 rounded-xl cursor-pointer py-2.5 text-destructive focus:bg-destructive/10 focus:text-destructive" onSelect={() => setDeleteConfirm(inv)}>
-                              <Trash2 className="h-4 w-4" /> Delete Permanent
+                            <DropdownMenuItem className="gap-2.5 rounded-xl cursor-pointer py-2.5 text-destructive" onSelect={() => setDeleteConfirm(inv)}>
+                              <Trash2 className="h-4 w-4" /> Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -317,44 +276,29 @@ const Invoices = () => {
         </div>
       </motion.div>
 
-      {/* --- Delete Confirmation --- */}
-      <Dialog
-        open={!!deleteConfirm}
-        onOpenChange={(o) => !o && setDeleteConfirm(null)}
-      >
-        <DialogContent className="max-w-sm rounded-3xl bg-card border-border shadow-xl text-center">
+      {/* Delete Dialog */}
+      <Dialog open={!!deleteConfirm} onOpenChange={(o) => !o && setDeleteConfirm(null)}>
+        <DialogContent className="max-w-sm rounded-3xl bg-card text-center">
           <div className="flex flex-col items-center gap-4 py-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
               <Trash2 className="h-8 w-8 text-destructive" />
             </div>
             <div>
-              <DialogTitle className="font-heading text-xl font-bold">
-                Delete Invoice?
-              </DialogTitle>
+              <DialogTitle className="font-heading text-xl font-bold">Delete Invoice?</DialogTitle>
               <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                Are you sure you want to delete{" "}
-                <span className="font-bold text-foreground">
-                  {deleteConfirm?.id}
-                </span>{" "}
-                for{" "}
-                <span className="font-bold text-foreground">
-                  {deleteConfirm?.customer}
-                </span>
-                ? This action is permanent.
+                Are you sure you want to delete <span className="font-bold text-foreground">{deleteConfirm?.invoiceNumber}</span> for <span className="font-bold text-foreground">{deleteConfirm?.customerName}</span>?
               </p>
             </div>
             <div className="flex w-full gap-3 mt-4">
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="flex-1 rounded-xl bg-background py-3 text-sm font-bold text-foreground shadow-clay-sm hover:shadow-clay"
-              >
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 rounded-xl bg-background py-3 text-sm font-bold text-foreground shadow-clay-sm hover:shadow-clay">
                 No, Keep it
               </button>
-              <button
-                onClick={handleDelete}
-                className="flex-1 rounded-xl bg-destructive py-3 text-sm font-bold text-white shadow-clay-sm hover:brightness-110 active:scale-95 transition-all"
+              <button 
+                onClick={handleDelete} 
+                disabled={deleteMutation.isPending}
+                className="flex-1 rounded-xl bg-destructive py-3 text-sm font-bold text-white shadow-clay-sm hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
               >
-                Yes, Delete
+                {deleteMutation.isPending ? "Deleting..." : "Yes, Delete"}
               </button>
             </div>
           </div>

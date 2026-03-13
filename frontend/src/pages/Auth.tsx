@@ -1,16 +1,45 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Receipt, Mail, Lock, User, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { Receipt, Mail, Lock, User, ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { apiService } from "../services/api.service";
+import { useAuth } from "../context/AuthContext";
+import { toast } from "sonner";
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
-  const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Form State
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const navigate = useNavigate();
+  const { login } = useAuth();
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate("/");
+    setIsLoading(true);
+    
+    try {
+      if (isLogin) {
+        const data = await apiService.login({ email, password });
+        login(data.token, data.user);
+        toast.success("Welcome back!");
+        navigate("/");
+      } else {
+        const data = await apiService.register({ name, email, password });
+        login(data.token, data.user);
+        toast.success("Account created successfully!");
+        navigate("/");
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Authentication failed");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -75,7 +104,11 @@ const Auth = () => {
                     <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <input
                       type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
                       placeholder="John Doe"
+                      required={!isLogin}
+                      disabled={isLoading}
                       className="h-12 w-full rounded-xl bg-background pl-11 pr-4 text-sm text-foreground shadow-clay-inset placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 border-0"
                     />
                   </div>
@@ -88,7 +121,11 @@ const Auth = () => {
                   <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@company.com"
+                    required
+                    disabled={isLoading}
                     className="h-12 w-full rounded-xl bg-background pl-11 pr-4 text-sm text-foreground shadow-clay-inset placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 border-0"
                   />
                 </div>
@@ -100,7 +137,11 @@ const Auth = () => {
                   <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
+                    required
+                    disabled={isLoading}
                     className="h-12 w-full rounded-xl bg-background pl-11 pr-12 text-sm text-foreground shadow-clay-inset placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 border-0"
                   />
                   <button
@@ -123,10 +164,17 @@ const Auth = () => {
 
               <button
                 type="submit"
-                className="group flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent text-sm font-semibold text-accent-foreground shadow-clay-sm transition-all duration-200 hover:shadow-clay active:shadow-clay-pressed"
+                disabled={isLoading}
+                className="group flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent text-sm font-semibold text-accent-foreground shadow-clay-sm transition-all duration-200 hover:shadow-clay active:shadow-clay-pressed disabled:opacity-70 disabled:pointer-events-none"
               >
-                {isLogin ? "Sign In" : "Create Account"}
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    {isLogin ? "Sign In" : "Create Account"}
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                  </>
+                )}
               </button>
             </motion.form>
           </AnimatePresence>

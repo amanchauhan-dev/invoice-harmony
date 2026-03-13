@@ -4,7 +4,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "./components/ThemeProvider";
+import { AuthProvider } from "./context/AuthContext";
 import AppLayout from "./components/layout/AppLayout";
+import ProtectedRoute from "./components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import Customers from "./pages/Customers";
 import Invoices from "./pages/Invoices";
@@ -20,15 +22,17 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <ThemeProvider>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
+    <AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
         <Sonner />
         <BrowserRouter>
           <Routes>
             <Route path="/auth" element={<Auth />} />
-            <Route element={<AppLayout />}>
-              <Route path="/" element={<Dashboard />} />
+            <Route element={<ProtectedRoute />}>
+              <Route element={<AppLayout />}>
+                <Route path="/" element={<Dashboard />} />
               <Route path="/customers" element={<Customers />} />
               <Route path="/invoices" element={<Invoices />} />
               <Route path="/invoices/create" element={<CreateInvoice />} />
@@ -36,13 +40,15 @@ const App = () => (
               <Route path="/invoices/view/:id" element={<ViewInvoice />} />
               <Route path="/payments" element={<Payments />} />
               <Route path="/reports" element={<Reports />} />
-              <Route path="/settings" element={<Settings />} />
+                <Route path="/settings" element={<Settings />} />
+              </Route>
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
+    </AuthProvider>
   </ThemeProvider>
 );
 

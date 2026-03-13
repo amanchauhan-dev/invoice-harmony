@@ -1,11 +1,9 @@
 import { motion } from "framer-motion";
-import { Search } from "lucide-react";
-
-const payments = [
-  { id: 1, invoice: "INV-001", customer: "Acme Corp", amount: "$2,500.00", method: "Bank Transfer", date: "Mar 12, 2026", ref: "TXN-8834" },
-  { id: 2, invoice: "INV-005", customer: "GreenLeaf Co", amount: "$4,100.00", method: "Card", date: "Mar 10, 2026", ref: "TXN-8821" },
-  { id: 3, invoice: "INV-006", customer: "Acme Corp", amount: "$1,250.00", method: "UPI", date: "Mar 09, 2026", ref: "TXN-8815" },
-];
+import { Search, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { apiService, ApiPayment } from "../services/api.service";
+import { format } from "date-fns";
 
 const methodStyles: Record<string, string> = {
   "Bank Transfer": "bg-accent/10 text-accent",
@@ -15,6 +13,17 @@ const methodStyles: Record<string, string> = {
 };
 
 const Payments = () => {
+  const [search, setSearch] = useState("");
+
+  const { data: payments = [], isLoading } = useQuery({
+    queryKey: ['payments'],
+    queryFn: () => apiService.getAllPayments(),
+  });
+
+  const filteredPayments = payments.filter((p: ApiPayment) => 
+     p.invoiceId.toLowerCase().includes(search.toLowerCase()) ||
+     p.paymentMethod.toLowerCase().includes(search.toLowerCase())
+  );
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>
@@ -35,26 +44,35 @@ const Payments = () => {
             <input
               type="text"
               placeholder="Search payments…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               className="h-10 w-full rounded-xl bg-background pl-10 pr-4 text-sm shadow-clay-inset placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 border-0"
             />
           </div>
         </div>
 
+        {isLoading ? (
+          <div className="flex h-40 items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-accent" />
+          </div>
+        ) : (
+          <>
+
         {/* Mobile card list */}
         <div className="divide-y divide-border/50 md:hidden">
-          {payments.map((p) => (
+          {filteredPayments.map((p) => (
             <div key={p.id} className="flex items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="text-xs font-bold text-accent">{p.invoice}</p>
-                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${methodStyles[p.method]}`}>
-                    {p.method}
+                  <p className="text-xs font-bold text-accent">{p.invoice?.invoiceNumber}</p>
+                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${methodStyles[p.paymentMethod] || methodStyles.Cash}`}>
+                    {p.paymentMethod}
                   </span>
                 </div>
-                <p className="mt-0.5 truncate text-sm font-medium text-foreground">{p.customer}</p>
-                <p className="text-[11px] text-muted-foreground">{p.date} · {p.ref}</p>
+                <p className="mt-0.5 truncate text-sm font-medium text-foreground">{p.invoice?.customer?.name}</p>
+                <p className="text-[11px] text-muted-foreground">{format(new Date(p.paymentDate), "MMM dd, yyyy")} · {p.id.slice(-6).toUpperCase()}</p>
               </div>
-              <p className="shrink-0 font-bold text-foreground">{p.amount}</p>
+              <p className="shrink-0 font-bold text-foreground">${p.amount.toLocaleString()}</p>
             </div>
           ))}
         </div>
@@ -73,23 +91,25 @@ const Payments = () => {
               </tr>
             </thead>
             <tbody>
-              {payments.map((p) => (
+              {filteredPayments.map((p) => (
                 <tr key={p.id} className="border-t border-border/50 hover:bg-muted/30 transition-colors">
-                  <td className="px-6 py-4 font-medium text-accent">{p.invoice}</td>
-                  <td className="px-6 py-4 text-foreground">{p.customer}</td>
-                  <td className="px-6 py-4 font-medium text-foreground">{p.amount}</td>
+                  <td className="px-6 py-4 font-medium text-accent">{p.invoice?.invoiceNumber}</td>
+                  <td className="px-6 py-4 text-foreground">{p.invoice?.customer?.name}</td>
+                  <td className="px-6 py-4 font-medium text-foreground">${p.amount.toLocaleString()}</td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${methodStyles[p.method]}`}>
-                      {p.method}
+                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${methodStyles[p.paymentMethod] || methodStyles.Cash}`}>
+                      {p.paymentMethod}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-muted-foreground">{p.date}</td>
-                  <td className="px-6 py-4 text-muted-foreground">{p.ref}</td>
+                  <td className="px-6 py-4 text-muted-foreground">{format(new Date(p.paymentDate), "MMM dd, yyyy")}</td>
+                  <td className="px-6 py-4 text-muted-foreground">{p.id.slice(-6).toUpperCase()}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      </>
+      )}
       </motion.div>
     </div>
   );

@@ -31,86 +31,21 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiService, ApiCustomer } from "../services/api.service";
+import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface Customer {
-  id: number;
-  name: string;
-  email: string;
-  company: string;
-  phone: string;
-  address: string;
+type Customer = ApiCustomer & { 
+  status: "active" | "inactive";
   invoices: number;
   revenue: string;
   joinedDate: string;
-  status: "active" | "inactive";
-}
+};
 
-// ─── Seed data ────────────────────────────────────────────────────────────────
-
-const seedCustomers: Customer[] = [
-  {
-    id: 1,
-    name: "Acme Corp",
-    email: "billing@acme.com",
-    company: "Acme Corporation",
-    phone: "+1 (555) 100-2000",
-    address: "123 Market St, San Francisco, CA 94105",
-    invoices: 12,
-    revenue: "$28,500",
-    joinedDate: "Jan 15, 2023",
-    status: "active",
-  },
-  {
-    id: 2,
-    name: "TechStart Inc",
-    email: "accounts@techstart.io",
-    company: "TechStart Inc",
-    phone: "+1 (555) 200-3000",
-    address: "456 Innovation Ave, Austin, TX 73301",
-    invoices: 8,
-    revenue: "$14,200",
-    joinedDate: "Mar 3, 2023",
-    status: "active",
-  },
-  {
-    id: 3,
-    name: "Design Studio",
-    email: "hello@designstudio.co",
-    company: "Design Studio LLC",
-    phone: "+1 (555) 300-4000",
-    address: "789 Creative Blvd, Brooklyn, NY 11201",
-    invoices: 5,
-    revenue: "$9,800",
-    joinedDate: "Jun 20, 2023",
-    status: "active",
-  },
-  {
-    id: 4,
-    name: "Cloud Nine LLC",
-    email: "finance@cloudnine.com",
-    company: "Cloud Nine LLC",
-    phone: "+1 (555) 400-5000",
-    address: "321 Cloud Way, Seattle, WA 98101",
-    invoices: 3,
-    revenue: "$4,500",
-    joinedDate: "Sep 8, 2023",
-    status: "inactive",
-  },
-  {
-    id: 5,
-    name: "GreenLeaf Co",
-    email: "pay@greenleaf.com",
-    company: "GreenLeaf Company",
-    phone: "+1 (555) 500-6000",
-    address: "654 Green St, Portland, OR 97201",
-    invoices: 7,
-    revenue: "$15,300",
-    joinedDate: "Nov 12, 2023",
-    status: "active",
-  },
-];
+// ─── Seed data removed ────────────────────────────────────────────────────────────────
 
 // ─── Shared form field ────────────────────────────────────────────────────────
 
@@ -187,26 +122,39 @@ function StatCard({
 
 // ─── Empty form ───────────────────────────────────────────────────────────────
 
-function emptyForm(): Omit<Customer, "id"> {
+function emptyForm(): Partial<Customer> {
   return {
     name: "",
     email: "",
     company: "",
     phone: "",
     address: "",
-    invoices: 0,
-    revenue: "$0",
-    joinedDate: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-    status: "active",
   };
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const Customers = () => {
-  const [customers, setCustomers] = useState<Customer[]>(seedCustomers);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [nextId, setNextId] = useState(seedCustomers.length + 1);
+
+  const { data: rawCustomers = [], isLoading } = useQuery({
+    queryKey: ['customers'],
+    queryFn: () => apiService.getCustomers(),
+  });
+
+  const customers: Customer[] = useMemo(() => {
+    return rawCustomers.map(c => ({
+      ...c,
+      status: "active", // We don't have this in db yet, assume active
+      company: c.company || "N/A",
+      phone: c.phone || "N/A",
+      address: c.address || "N/A",
+      invoices: c._count?.invoices || 0,
+      revenue: "$0", // Mock for now until we add revenue aggregations per customer
+      joinedDate: new Date(c.createdAt).toLocaleDateString(),
+    }));
+  }, [rawCustomers]);
 
   // dialog state
   const [createOpen, setCreateOpen] = useState(false);
@@ -215,18 +163,49 @@ const Customers = () => {
   const [deleteCustomer, setDeleteCustomer] = useState<Customer | null>(null);
 
   // form state (shared for create + edit)
-  const [form, setForm] = useState<Omit<Customer, "id">>(emptyForm());
+  const [form, setForm] = useState<Partial<Customer>>(emptyForm());
 
   const filtered = useMemo(
     () =>
       customers.filter(
         (c) =>
-          c.name.toLowerCase().includes(search.toLowerCase()) ||
-          c.email.toLowerCase().includes(search.toLowerCase()) ||
-          c.company.toLowerCase().includes(search.toLowerCase())
+          c.name?.toLowerCase().includes(search.toLowerCase()) ||
+          c.email?.toLowerCase().includes(search.toLowerCase()) ||
+          c.company?.toLowerCase().includes(search.toLowerCase())
       ),
     [customers, search]
   );
+
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: (newCustomer: any) => apiService.createCustomer(newCustomer),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      setCreateOpen(false);
+      toast.success('Customer created successfully');
+    },
+    onError: (error: any) => toast.error(error.message || 'Failed to create customer')
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string, data: any }) => apiService.updateCustomer(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      setEditCustomer(null);
+      toast.success('Customer updated successfully');
+    },
+    onError: (error: any) => toast.error(error.message || 'Failed to update customer')
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiService.deleteCustomer(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      setDeleteCustomer(null);
+      toast.success('Customer deleted successfully');
+    },
+    onError: (error: any) => toast.error(error.message || 'Failed to delete customer')
+  });
 
   // ── handlers ──────────────────────────────────────────────────────────────
 
@@ -242,27 +221,36 @@ const Customers = () => {
   }
 
   function handleSaveCreate() {
-    if (!form.name.trim() || !form.email.trim()) return;
-    setCustomers((prev) => [...prev, { id: nextId, ...form }]);
-    setNextId((n) => n + 1);
-    setCreateOpen(false);
+    if (!form.name?.trim() || !form.email?.trim()) return;
+    createMutation.mutate({
+      name: form.name,
+      email: form.email,
+      company: form.company,
+      phone: form.phone,
+      address: form.address
+    });
   }
 
   function handleSaveEdit() {
-    if (!editCustomer || !form.name.trim() || !form.email.trim()) return;
-    setCustomers((prev) =>
-      prev.map((c) => (c.id === editCustomer.id ? { ...editCustomer, ...form } : c))
-    );
-    setEditCustomer(null);
+    if (!editCustomer || !form.name?.trim() || !form.email?.trim()) return;
+    updateMutation.mutate({
+      id: editCustomer.id,
+      data: {
+        name: form.name,
+        email: form.email,
+        company: form.company,
+        phone: form.phone,
+        address: form.address
+      }
+    });
   }
 
   function handleDelete() {
     if (!deleteCustomer) return;
-    setCustomers((prev) => prev.filter((c) => c.id !== deleteCustomer.id));
-    setDeleteCustomer(null);
+    deleteMutation.mutate(deleteCustomer.id);
   }
 
-  function handleFormChange(field: keyof Omit<Customer, "id">, value: string) {
+  function handleFormChange(field: keyof Customer, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
@@ -274,7 +262,7 @@ const Customers = () => {
         label="Full Name *"
         icon={User}
         placeholder="e.g. Acme Corp"
-        value={form.name}
+        value={form.name || ""}
         onChange={(e) => handleFormChange("name", e.target.value)}
       />
       <Field
@@ -282,14 +270,14 @@ const Customers = () => {
         icon={Mail}
         type="email"
         placeholder="billing@company.com"
-        value={form.email}
+        value={form.email || ""}
         onChange={(e) => handleFormChange("email", e.target.value)}
       />
       <Field
         label="Company"
         icon={Building2}
         placeholder="Company name"
-        value={form.company}
+        value={form.company || ""}
         onChange={(e) => handleFormChange("company", e.target.value)}
       />
       <Field
@@ -297,7 +285,7 @@ const Customers = () => {
         icon={Phone}
         type="tel"
         placeholder="+1 (555) 000-0000"
-        value={form.phone}
+        value={form.phone || ""}
         onChange={(e) => handleFormChange("phone", e.target.value)}
       />
       <div className="sm:col-span-2">
@@ -305,7 +293,7 @@ const Customers = () => {
           label="Address"
           icon={MapPin}
           placeholder="Street, City, State ZIP"
-          value={form.address}
+          value={form.address || ""}
           onChange={(e) => handleFormChange("address", e.target.value)}
         />
       </div>
@@ -336,6 +324,14 @@ const Customers = () => {
   );
 
   // ── render ─────────────────────────────────────────────────────────────────
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-accent" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -535,10 +531,10 @@ const Customers = () => {
             </button>
             <button
               onClick={handleSaveCreate}
-              disabled={!form.name.trim() || !form.email.trim()}
+              disabled={!form.name?.trim() || !form.email?.trim() || createMutation.isPending}
               className="flex-1 rounded-xl bg-accent py-2.5 text-sm font-medium text-accent-foreground shadow-clay-sm transition-all hover:shadow-clay active:shadow-clay-pressed disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Create Customer
+              {createMutation.isPending ? "Creating..." : "Create Customer"}
             </button>
           </DialogFooter>
         </DialogContent>
@@ -650,10 +646,10 @@ const Customers = () => {
             </button>
             <button
               onClick={handleSaveEdit}
-              disabled={!form.name.trim() || !form.email.trim()}
+              disabled={!form.name?.trim() || !form.email?.trim() || updateMutation.isPending}
               className="flex-1 rounded-xl bg-accent py-2.5 text-sm font-medium text-accent-foreground shadow-clay-sm transition-all hover:shadow-clay active:shadow-clay-pressed disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Save Changes
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
             </button>
           </DialogFooter>
         </DialogContent>
@@ -685,9 +681,10 @@ const Customers = () => {
               </button>
               <button
                 onClick={handleDelete}
-                className="flex-1 rounded-xl bg-destructive py-2.5 text-sm font-medium text-white transition-all hover:opacity-90 active:opacity-80"
+                disabled={deleteMutation.isPending}
+                className="flex-1 rounded-xl bg-destructive py-2.5 text-sm font-medium text-white transition-all hover:opacity-90 active:opacity-80 disabled:opacity-50"
               >
-                Delete
+                {deleteMutation.isPending ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>
