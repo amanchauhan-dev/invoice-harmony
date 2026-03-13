@@ -17,6 +17,7 @@ import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import CreateInvoice from "./pages/CreateInvoice";
 import ViewInvoice from "./pages/ViewInvoice";
+import PayInvoice from "./pages/PayInvoice";
 
 const queryClient = new QueryClient();
 
@@ -27,9 +28,13 @@ const App = () => (
         <TooltipProvider>
           <Toaster />
         <Sonner />
-        <BrowserRouter>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
+            {/* Public routes */}
             <Route path="/auth" element={<Auth />} />
+            <Route path="/pay/:invoiceId" element={<PayInvoice />} />
+
+            {/* Protected routes */}
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
                 <Route path="/" element={<Dashboard />} />

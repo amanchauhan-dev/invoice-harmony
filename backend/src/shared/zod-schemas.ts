@@ -13,19 +13,19 @@ export const updatePaymentSchema = createPaymentSchema.partial();
 
 // Profile validation
 export const updateProfileSchema = z.object({
-  name: z.string().min(1).optional(),
-  email: z.string().email().optional(),
+  name: z.string().min(1).nullish(),
+  email: z.string().email().nullish(),
 });
 
 // Settings validation
 export const updateSettingsSchema = z.object({
-  currency: z.string().length(3).optional(),
-  taxRate: z.number().min(0).max(100).optional(),
-  companyName: z.string().optional(),
-  companyAddress: z.string().optional(),
-  companyPhone: z.string().optional(),
-  companyEmail: z.string().email().optional(),
-  companyLogo: z.string().url().or(z.string().startsWith('data:image/')).optional(),
+  currency: z.string().length(3).nullish(),
+  taxRate: z.number().min(0).max(100).nullish(),
+  companyName: z.string().nullish(),
+  companyAddress: z.string().nullish(),
+  companyPhone: z.string().nullish(),
+  companyEmail: z.union([z.string().email(), z.literal('')]).nullish(),
+  companyLogo: z.union([z.string().url(), z.string().startsWith('data:image/'), z.literal('')]).nullish(),
 });
 
 // Invoice validation

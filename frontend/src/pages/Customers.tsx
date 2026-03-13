@@ -7,13 +7,13 @@ import {
   Eye,
   Pencil,
   Trash2,
-  User,
-  Building2,
   Mail,
   Phone,
+  Building2,
   MapPin,
-  FileText,
+  User,
   DollarSign,
+  FileText,
   CalendarDays,
 } from "lucide-react";
 import {
@@ -28,183 +28,251 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiService, ApiCustomer } from "../services/api.service";
+import { apiService, CreateCustomerRequest, ApiCustomer } from "../services/api.service";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ── types ──────────────────────────────────────────────────────────────
 
-type Customer = ApiCustomer & { 
-  status: "active" | "inactive";
+interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  company?: string;
+  phone?: string;
+  address?: string;
   invoices: number;
   revenue: string;
+  status: "active" | "inactive";
   joinedDate: string;
-};
-
-// ─── Seed data removed ────────────────────────────────────────────────────────────────
-
-// ─── Shared form field ────────────────────────────────────────────────────────
-
-function Field({
-  label,
-  icon: Icon,
-  ...props
-}: React.InputHTMLAttributes<HTMLInputElement> & {
-  label: string;
-  icon?: React.ElementType;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-        {label}
-      </label>
-      <div className="relative">
-        {Icon && (
-          <Icon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        )}
-        <input
-          {...props}
-          className={`h-10 w-full rounded-xl bg-background text-sm text-foreground shadow-clay-inset placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 border-0 ${
-            Icon ? "pl-9 pr-4" : "px-4"
-          } ${props.className ?? ""}`}
-        />
-      </div>
-    </div>
-  );
 }
 
-// ─── Avatar helper ────────────────────────────────────────────────────────────
+// ── internal components ──────────────────────────────────────────────────────
 
-function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg" }) {
+const Avatar = ({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg" }) => {
   const initials = name
     .split(" ")
-    .map((w) => w[0])
+    .map((n) => n[0])
     .join("")
-    .slice(0, 2)
-    .toUpperCase();
-  const sizes = { sm: "h-8 w-8 text-xs", md: "h-10 w-10 text-sm", lg: "h-14 w-14 text-base" };
+    .toUpperCase()
+    .slice(0, 2);
+
+  const colors = [
+    "bg-accent/20 text-accent",
+    "bg-success/20 text-success",
+    "bg-primary/20 text-primary",
+    "bg-orange-500/20 text-orange-500",
+  ];
+  const color = colors[name.length % colors.length];
+
+  const sizes = {
+    sm: "h-9 w-9 text-xs",
+    md: "h-11 w-11 text-sm",
+    lg: "h-16 w-16 text-xl",
+  };
+
   return (
-    <div
-      className={`${sizes[size]} flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-primary font-heading font-bold text-white shadow-clay-sm`}
-    >
+    <div className={`flex items-center justify-center rounded-xl font-bold shadow-clay-sm ${sizes[size]} ${color}`}>
       {initials}
     </div>
   );
-}
+};
 
-// ─── Stat card (used in View dialog) ─────────────────────────────────────────
+const StatCard = ({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string | number }) => (
+  <div className="flex flex-col gap-1 rounded-2xl bg-background p-4 shadow-clay-sm">
+    <div className="flex items-center gap-2 text-muted-foreground">
+      <Icon className="h-4 w-4" />
+      <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
+    </div>
+    <span className="text-lg font-bold text-foreground">{value}</span>
+  </div>
+);
 
-function StatCard({
-  icon: Icon,
+const Field = ({
   label,
+  icon: Icon,
+  type = "text",
+  placeholder,
   value,
+  onChange,
 }: {
-  icon: React.ElementType;
   label: string;
-  value: string | number;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl bg-background p-3 shadow-clay-sm">
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10 text-accent">
-        <Icon className="h-4 w-4" />
-      </div>
-      <div>
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm font-semibold text-foreground">{value}</p>
+  icon: React.ElementType;
+  type?: string;
+  placeholder: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) => (
+  <div className="space-y-1.5">
+    <label className="text-xs font-semibold text-muted-foreground ml-1 uppercase tracking-wider">
+      {label}
+    </label>
+    <div className="relative">
+      <Icon className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <input
+        type={type}
+        placeholder={placeholder}
+        className="h-11 w-full rounded-xl bg-background pl-10 pr-4 text-sm text-foreground shadow-clay-inset placeholder:text-muted-foreground/50 transition-all focus:outline-none focus:ring-2 focus:ring-accent/30 border-0"
+        value={value}
+        onChange={onChange}
+      />
+    </div>
+  </div>
+);
+
+// New: Moved outside to prevent focus loss during renders
+const CustomerFormBody = ({ 
+  form, 
+  onFieldChange 
+}: { 
+  form: Partial<Customer>; 
+  onFieldChange: (field: keyof Customer, value: string) => void 
+}) => (
+  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <Field
+      label="Full Name *"
+      icon={User}
+      placeholder="e.g. Acme Corp"
+      value={form.name || ""}
+      onChange={(e) => onFieldChange("name", e.target.value)}
+    />
+    <Field
+      label="Email *"
+      icon={Mail}
+      type="email"
+      placeholder="billing@company.com"
+      value={form.email || ""}
+      onChange={(e) => onFieldChange("email", e.target.value)}
+    />
+    <Field
+      label="Company"
+      icon={Building2}
+      placeholder="Company name"
+      value={form.company || ""}
+      onChange={(e) => onFieldChange("company", e.target.value)}
+    />
+    <Field
+      label="Phone"
+      icon={Phone}
+      type="tel"
+      placeholder="+1 (555) 000-0000"
+      value={form.phone || ""}
+      onChange={(e) => onFieldChange("phone", e.target.value)}
+    />
+    <div className="sm:col-span-2">
+      <Field
+        label="Address"
+        icon={MapPin}
+        placeholder="Street, City, State ZIP"
+        value={form.address || ""}
+        onChange={(e) => onFieldChange("address", e.target.value)}
+      />
+    </div>
+    <div className="sm:col-span-2 space-y-1.5">
+      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        Status
+      </label>
+      <div className="flex gap-3">
+        {(["active", "inactive"] as const).map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onFieldChange("status", s)}
+            className={`flex-1 rounded-xl py-2 text-xs font-semibold capitalize transition-all ${
+              form.status === s
+                ? s === "active"
+                  ? "bg-success/15 text-success ring-1 ring-success/30"
+                  : "bg-destructive/15 text-destructive ring-1 ring-destructive/30"
+                : "bg-background shadow-clay-sm text-muted-foreground hover:shadow-clay"
+            }`}
+          >
+            {s}
+          </button>
+        ))}
       </div>
     </div>
-  );
-}
+  </div>
+);
 
-// ─── Empty form ───────────────────────────────────────────────────────────────
-
-function emptyForm(): Partial<Customer> {
-  return {
-    name: "",
-    email: "",
-    company: "",
-    phone: "",
-    address: "",
-  };
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ── page component ─────────────────────────────────────────────────────────────
 
 const Customers = () => {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-
-  const { data: rawCustomers = [], isLoading } = useQuery({
-    queryKey: ['customers'],
-    queryFn: () => apiService.getCustomers(),
-  });
-
-  const customers: Customer[] = useMemo(() => {
-    return rawCustomers.map(c => ({
-      ...c,
-      status: "active", // We don't have this in db yet, assume active
-      company: c.company || "N/A",
-      phone: c.phone || "N/A",
-      address: c.address || "N/A",
-      invoices: c._count?.invoices || 0,
-      revenue: "$0", // Mock for now until we add revenue aggregations per customer
-      joinedDate: new Date(c.createdAt).toLocaleDateString(),
-    }));
-  }, [rawCustomers]);
-
-  // dialog state
   const [createOpen, setCreateOpen] = useState(false);
   const [viewCustomer, setViewCustomer] = useState<Customer | null>(null);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [deleteCustomer, setDeleteCustomer] = useState<Customer | null>(null);
 
-  // form state (shared for create + edit)
+  const emptyForm = (): Partial<Customer> => ({
+    name: "",
+    email: "",
+    company: "",
+    phone: "",
+    address: "",
+    status: "active",
+  });
+
   const [form, setForm] = useState<Partial<Customer>>(emptyForm());
 
-  const filtered = useMemo(
-    () =>
-      customers.filter(
-        (c) =>
-          c.name?.toLowerCase().includes(search.toLowerCase()) ||
-          c.email?.toLowerCase().includes(search.toLowerCase()) ||
-          c.company?.toLowerCase().includes(search.toLowerCase())
-      ),
-    [customers, search]
-  );
+  const { data: apiCustomers = [], isLoading } = useQuery({
+    queryKey: ["customers"],
+    queryFn: () => apiService.getCustomers(),
+  });
 
-  // Mutations
+  const customers: Customer[] = useMemo(() => {
+    return apiCustomers.map((c: ApiCustomer) => ({
+      ...c,
+      invoices: 0,
+      revenue: "$0.00",
+      status: "active",
+      joinedDate: "Mar 2024",
+    }));
+  }, [apiCustomers]);
+
+  const filtered = useMemo(() => {
+    return customers.filter(
+      (c) =>
+        c.name.toLowerCase().includes(search.toLowerCase()) ||
+        c.email.toLowerCase().includes(search.toLowerCase()) ||
+        c.company.toLowerCase().includes(search.toLowerCase())
+    );
+  }, [customers, search]);
+
   const createMutation = useMutation({
-    mutationFn: (newCustomer: any) => apiService.createCustomer(newCustomer),
+    mutationFn: (data: CreateCustomerRequest) => apiService.createCustomer(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
       setCreateOpen(false);
-      toast.success('Customer created successfully');
+      setForm(emptyForm());
+      toast.success("Customer created successfully");
     },
-    onError: (error: any) => toast.error(error.message || 'Failed to create customer')
+    onError: (error: Error) => toast.error(error.message || "Failed to create customer"),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string, data: any }) => apiService.updateCustomer(id, data),
+    mutationFn: ({ id, data }: { id: string; data: Partial<CreateCustomerRequest> }) =>
+      apiService.updateCustomer(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
       setEditCustomer(null);
-      toast.success('Customer updated successfully');
+      setForm(emptyForm());
+      toast.success("Customer updated successfully");
     },
-    onError: (error: any) => toast.error(error.message || 'Failed to update customer')
+    onError: (error: Error) => toast.error(error.message || "Failed to update customer"),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiService.deleteCustomer(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
       setDeleteCustomer(null);
-      toast.success('Customer deleted successfully');
+      toast.success("Customer deleted successfully");
     },
-    onError: (error: any) => toast.error(error.message || 'Failed to delete customer')
+    onError: (error: Error) => toast.error(error.message || "Failed to delete customer"),
   });
 
   // ── handlers ──────────────────────────────────────────────────────────────
@@ -227,7 +295,7 @@ const Customers = () => {
       email: form.email,
       company: form.company,
       phone: form.phone,
-      address: form.address
+      address: form.address,
     });
   }
 
@@ -240,8 +308,8 @@ const Customers = () => {
         email: form.email,
         company: form.company,
         phone: form.phone,
-        address: form.address
-      }
+        address: form.address,
+      },
     });
   }
 
@@ -250,85 +318,41 @@ const Customers = () => {
     deleteMutation.mutate(deleteCustomer.id);
   }
 
-  function handleFormChange(field: keyof Customer, value: string) {
+  const handleFormChange = (field: keyof Customer, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
-  }
+  };
 
-  // ── shared form body ───────────────────────────────────────────────────────
-
-  const CustomerForm = () => (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <Field
-        label="Full Name *"
-        icon={User}
-        placeholder="e.g. Acme Corp"
-        value={form.name || ""}
-        onChange={(e) => handleFormChange("name", e.target.value)}
-      />
-      <Field
-        label="Email *"
-        icon={Mail}
-        type="email"
-        placeholder="billing@company.com"
-        value={form.email || ""}
-        onChange={(e) => handleFormChange("email", e.target.value)}
-      />
-      <Field
-        label="Company"
-        icon={Building2}
-        placeholder="Company name"
-        value={form.company || ""}
-        onChange={(e) => handleFormChange("company", e.target.value)}
-      />
-      <Field
-        label="Phone"
-        icon={Phone}
-        type="tel"
-        placeholder="+1 (555) 000-0000"
-        value={form.phone || ""}
-        onChange={(e) => handleFormChange("phone", e.target.value)}
-      />
-      <div className="sm:col-span-2">
-        <Field
-          label="Address"
-          icon={MapPin}
-          placeholder="Street, City, State ZIP"
-          value={form.address || ""}
-          onChange={(e) => handleFormChange("address", e.target.value)}
-        />
-      </div>
-      <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Status
-        </label>
-        <div className="flex gap-3">
-          {(["active", "inactive"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => handleFormChange("status", s)}
-              className={`flex-1 rounded-xl py-2 text-xs font-semibold capitalize transition-all ${
-                form.status === s
-                  ? s === "active"
-                    ? "bg-success/15 text-success ring-1 ring-success/30"
-                    : "bg-destructive/15 text-destructive ring-1 ring-destructive/30"
-                  : "bg-background shadow-clay-sm text-muted-foreground hover:shadow-clay"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  // ── render ─────────────────────────────────────────────────────────────────
+  // ── render ──────────────────────────────────────────────────────────────
 
   if (isLoading) {
     return (
-      <div className="flex h-[50vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-accent" />
+      <div className="space-y-4 sm:space-y-6 animate-pulse">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-2">
+            <div className="h-7 w-36 rounded-xl bg-muted" />
+            <div className="h-4 w-32 rounded-lg bg-muted" />
+          </div>
+          <div className="h-10 w-32 rounded-xl bg-muted" />
+        </div>
+        <div className="rounded-2xl bg-card shadow-clay-sm overflow-hidden">
+          {/* Table header */}
+          <div className="flex items-center gap-4 px-5 py-3 border-b border-border/50">
+            {[...Array(5)].map((_, i) => <div key={i} className="h-3 w-20 rounded bg-muted" />)}
+          </div>
+          {/* Rows */}
+          {[...Array(7)].map((_, i) => (
+            <div key={i} className="flex items-center gap-4 px-5 py-4 border-b border-border/30">
+              <div className="h-9 w-9 rounded-xl bg-muted shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <div className="h-3.5 w-36 rounded bg-muted" />
+                <div className="h-3 w-28 rounded bg-muted" />
+              </div>
+              <div className="hidden sm:block h-3 w-24 rounded bg-muted" />
+              <div className="hidden lg:block h-3 w-32 rounded bg-muted" />
+              <div className="h-7 w-16 rounded-xl bg-muted" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -374,7 +398,7 @@ const Customers = () => {
           </div>
         </div>
 
-        {/* Mobile card list (hidden on md+) */}
+        {/* Mobile card list */}
         <div className="divide-y divide-border/50 md:hidden">
           {filtered.length === 0 ? (
             <p className="px-4 py-12 text-center text-sm text-muted-foreground">No customers found.</p>
@@ -420,7 +444,7 @@ const Customers = () => {
           )}
         </div>
 
-        {/* Desktop table (hidden on mobile) */}
+        {/* Desktop table */}
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
@@ -504,8 +528,7 @@ const Customers = () => {
         </div>
       </motion.div>
 
-
-      {/* ── Create Dialog ─────────────────────────────────────────────────── */}
+      {/* ── Create Dialog ──────────────────────────────────────────────────────────── */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-lg rounded-2xl bg-card border-border shadow-clay">
           <DialogHeader>
@@ -521,7 +544,7 @@ const Customers = () => {
               </div>
             </div>
           </DialogHeader>
-          <CustomerForm />
+          <CustomerFormBody form={form} onFieldChange={handleFormChange} />
           <DialogFooter className="gap-2 pt-2">
             <button
               onClick={() => setCreateOpen(false)}
@@ -540,7 +563,7 @@ const Customers = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── View Dialog ───────────────────────────────────────────────────── */}
+      {/* ── View Dialog ──────────────────────────────────────────────────────────── */}
       <Dialog open={!!viewCustomer} onOpenChange={(o) => !o && setViewCustomer(null)}>
         <DialogContent className="max-w-md rounded-2xl bg-card border-border shadow-clay">
           <DialogHeader>
@@ -620,7 +643,7 @@ const Customers = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Edit Dialog ───────────────────────────────────────────────────── */}
+      {/* ── Edit Dialog ──────────────────────────────────────────────────────────── */}
       <Dialog open={!!editCustomer} onOpenChange={(o) => !o && setEditCustomer(null)}>
         <DialogContent className="max-w-lg rounded-2xl bg-card border-border shadow-clay">
           <DialogHeader>
@@ -636,7 +659,7 @@ const Customers = () => {
               </div>
             </div>
           </DialogHeader>
-          <CustomerForm />
+          <CustomerFormBody form={form} onFieldChange={handleFormChange} />
           <DialogFooter className="gap-2 pt-2">
             <button
               onClick={() => setEditCustomer(null)}
@@ -655,7 +678,7 @@ const Customers = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Delete Confirm Dialog ─────────────────────────────────────────── */}
+      {/* ── Delete Confirm Dialog ────────────────────────────────────────────── */}
       <Dialog open={!!deleteCustomer} onOpenChange={(o) => !o && setDeleteCustomer(null)}>
         <DialogContent className="max-w-sm rounded-2xl bg-card border-border shadow-clay text-center">
           <DialogHeader>

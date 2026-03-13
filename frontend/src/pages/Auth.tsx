@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Receipt, Mail, Lock, User, ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { apiService } from "../services/api.service";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/use-auth";
 import { toast } from "sonner";
 
 const Auth = () => {
@@ -35,8 +35,8 @@ const Auth = () => {
         toast.success("Account created successfully!");
         navigate("/");
       }
-    } catch (error: any) {
-      toast.error(error.message || "Authentication failed");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Authentication failed");
     } finally {
       setIsLoading(false);
     }

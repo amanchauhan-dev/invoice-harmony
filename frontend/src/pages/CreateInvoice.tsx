@@ -21,7 +21,7 @@ import {
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiService, ApiInvoice } from "../services/api.service";
+import { apiService, ApiInvoice, ApiCustomer, CreateInvoiceRequest } from "../services/api.service";
 import { toast } from "sonner";
 
 interface LineItem {
@@ -56,6 +56,9 @@ const CreateInvoice = () => {
   const queryClient = useQueryClient();
   const isEditing = !!id;
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
   const [form, setForm] = useState<InvoiceForm>({
     invoiceNumber: `INV-${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`,
     customerName: "",
@@ -68,6 +71,30 @@ const CreateInvoice = () => {
     status: "Draft",
   });
 
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: () => apiService.getCustomers(),
+  });
+
+  const filteredCustomers = useMemo(() => {
+    if (!searchQuery) return customers;
+    return customers.filter(c => 
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.email.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [customers, searchQuery]);
+
+  const handleSelectCustomer = (customer: ApiCustomer) => {
+    setForm(prev => ({
+      ...prev,
+      customerName: customer.name,
+      customerEmail: customer.email,
+      customerAddress: customer.address || "",
+    }));
+    setSearchQuery(customer.name);
+    setIsDropdownOpen(false);
+  };
+
   const { isLoading: isLoadingInvoice } = useQuery({
     queryKey: ['invoice', id],
     queryFn: async () => {
@@ -79,12 +106,14 @@ const CreateInvoice = () => {
         customerAddress: inv.customerAddress || "",
         issueDate: new Date(inv.issueDate).toISOString().split("T")[0],
         dueDate: new Date(inv.dueDate).toISOString().split("T")[0],
-        items: inv.items.map((it: { id?: string; description: string; quantity: number; rate: number }) => ({ 
-          ...it, 
+        items: inv.items?.map((it: { id?: string; description: string; quantity: number; rate: number }) => ({ 
+          description: it.description || "",
+          quantity: it.quantity || 1,
+          rate: it.rate || 0,
           id: it.id || crypto.randomUUID() 
-        })),
+        })) || [{ id: crypto.randomUUID(), description: "", quantity: 1, rate: 0 }],
         notes: inv.notes || "",
-        status: inv.status as "Draft" | "Sent" | "Paid",
+        status: (inv.status as "Draft" | "Sent" | "Paid") || "Draft",
       });
       return inv;
     },
@@ -109,7 +138,13 @@ const CreateInvoice = () => {
   };
 
   const handleRemoveItem = (id: string) => {
-    if (form.items.length === 1) return;
+    if (form.items.length === 1) {
+      setForm((prev) => ({
+        ...prev,
+        items: [{ id: crypto.randomUUID(), description: "", quantity: 1, rate: 0 }],
+      }));
+      return;
+    }
     setForm((prev) => ({
       ...prev,
       items: prev.items.filter((item) => item.id !== id),
@@ -126,7 +161,7 @@ const CreateInvoice = () => {
   };
 
   const saveMutation = useMutation({
-    mutationFn: (payload: Partial<ApiInvoice>) => {
+    mutationFn: (payload: CreateInvoiceRequest) => {
       if (isEditing) {
         // Assume update logic exists or just show a warning
         // return apiService.updateInvoice(id!, payload);
@@ -151,8 +186,14 @@ const CreateInvoice = () => {
       return;
     }
     
-    const payload = {
-      ...form,
+    const payload: CreateInvoiceRequest = {
+      invoiceNumber: form.invoiceNumber,
+      customerName: form.customerName,
+      customerEmail: form.customerEmail,
+      customerAddress: form.customerAddress,
+      issueDate: form.issueDate,
+      dueDate: form.dueDate,
+      notes: form.notes,
       subtotal,
       tax,
       totalAmount: total,
@@ -234,16 +275,51 @@ const CreateInvoice = () => {
           </div>
           
           <div className="space-y-4 rounded-3xl bg-background p-5 shadow-clay-inset">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Customer Name</label>
-              <input
-                type="text"
-                required
-                placeholder="Enter full name"
-                value={form.customerName}
-                onChange={(e) => setForm({ ...form, customerName: e.target.value })}
-                className="w-full rounded-xl border-0 bg-card px-4 py-2 text-sm font-bold text-foreground shadow-clay-sm outline-none placeholder:text-muted-foreground/30 focus:ring-2 focus:ring-accent/20"
-              />
+            <div className="space-y-2 relative">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Customer Name</label>
+                {(form.customerName || searchQuery) && (
+                  <button 
+                    onClick={() => {
+                      setForm(prev => ({ ...prev, customerName: "", customerEmail: "", customerAddress: "" }));
+                      setSearchQuery("");
+                    }}
+                    className="text-[9px] font-black uppercase tracking-widest text-accent hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  placeholder="Search or enter full name"
+                  value={searchQuery || form.customerName || ""}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setForm({ ...form, customerName: e.target.value });
+                    setIsDropdownOpen(true);
+                  }}
+                  onFocus={() => setIsDropdownOpen(true)}
+                  className="w-full rounded-xl border-0 bg-card px-4 py-2 text-sm font-bold text-foreground shadow-clay-sm outline-none placeholder:text-muted-foreground/30 focus:ring-2 focus:ring-accent/20"
+                />
+                
+                {isDropdownOpen && filteredCustomers.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-48 overflow-y-auto rounded-2xl bg-card p-2 shadow-clay-lg animate-in fade-in slide-in-from-top-2">
+                    {filteredCustomers.map(customer => (
+                      <button
+                        key={customer.id}
+                        onClick={() => handleSelectCustomer(customer)}
+                        className="flex w-full flex-col gap-0.5 rounded-xl p-3 text-left transition-colors hover:bg-accent/5"
+                      >
+                        <span className="text-xs font-bold text-foreground">{customer.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{customer.email}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Email Address</label>
@@ -251,7 +327,7 @@ const CreateInvoice = () => {
                 type="email"
                 required
                 placeholder="customer@company.com"
-                value={form.customerEmail}
+                value={form.customerEmail || ""}
                 onChange={(e) => setForm({ ...form, customerEmail: e.target.value })}
                 className="w-full rounded-xl border-0 bg-card px-4 py-2 text-sm font-bold text-foreground shadow-clay-sm outline-none placeholder:text-muted-foreground/30 focus:ring-2 focus:ring-accent/20"
               />
@@ -260,7 +336,7 @@ const CreateInvoice = () => {
               <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Billing Address</label>
               <textarea
                 placeholder="Street, City, ZIP..."
-                value={form.customerAddress}
+                value={form.customerAddress || ""}
                 onChange={(e) => setForm({ ...form, customerAddress: e.target.value })}
                 className="h-20 w-full resize-none rounded-xl border-0 bg-card px-4 py-2 text-sm font-bold text-foreground shadow-clay-sm outline-none placeholder:text-muted-foreground/30 focus:ring-2 focus:ring-accent/20"
               />
@@ -493,8 +569,64 @@ const CreateInvoice = () => {
 
   if (isLoadingInvoice) {
     return (
-      <div className="flex h-[50vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-accent" />
+      <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-background -m-4 sm:-m-6 lg:-m-8 animate-pulse">
+        {/* Top bar skeleton */}
+        <div className="flex h-14 sm:h-16 shrink-0 items-center justify-between border-b border-border/50 bg-card px-4 sm:px-6">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-muted" />
+            <div className="space-y-1.5">
+              <div className="h-4 w-36 rounded bg-muted" />
+              <div className="h-3 w-24 rounded bg-muted" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="h-9 w-24 rounded-xl bg-muted" />
+            <div className="h-9 w-28 rounded-xl bg-muted" />
+          </div>
+        </div>
+        {/* Panel skeleton */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Left panel */}
+          <div className="flex-1 overflow-y-auto p-5 space-y-5">
+            {/* Customer card */}
+            <div className="rounded-2xl bg-card p-5 shadow-clay-sm space-y-4">
+              <div className="h-4 w-28 rounded bg-muted" />
+              <div className="h-10 w-full rounded-xl bg-muted" />
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="space-y-1.5">
+                  <div className="h-3 w-20 rounded bg-muted" />
+                  <div className="h-10 w-full rounded-xl bg-muted" />
+                </div>
+              ))}
+            </div>
+            {/* Invoice details card */}
+            <div className="rounded-2xl bg-card p-5 shadow-clay-sm space-y-4">
+              <div className="h-4 w-32 rounded bg-muted" />
+              <div className="grid grid-cols-2 gap-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="space-y-1.5">
+                    <div className="h-3 w-20 rounded bg-muted" />
+                    <div className="h-10 w-full rounded-xl bg-muted" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          {/* Right panel — line items */}
+          <div className="hidden lg:flex w-96 flex-col border-l border-border/50 p-5 space-y-4">
+            <div className="h-4 w-24 rounded bg-muted" />
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="rounded-xl bg-muted/50 p-3 space-y-2">
+                <div className="h-10 w-full rounded-lg bg-muted" />
+                <div className="flex gap-2">
+                  <div className="h-9 flex-1 rounded-lg bg-muted" />
+                  <div className="h-9 flex-1 rounded-lg bg-muted" />
+                </div>
+              </div>
+            ))}
+            <div className="h-9 w-full rounded-xl bg-muted" />
+          </div>
+        </div>
       </div>
     );
   }

@@ -39,7 +39,7 @@ const Settings = () => {
       queryClient.setQueryData(['settings'], updatedSettings);
       toast.success("Settings updated successfully");
     },
-    onError: () => toast.error("Failed to update settings")
+    onError: (error: Error) => toast.error(error.message || "Failed to update settings")
   });
 
   const updateProfileMutation = useMutation({
@@ -48,7 +48,7 @@ const Settings = () => {
       queryClient.setQueryData(['profile'], updatedProfile);
       toast.success("Profile updated successfully");
     },
-    onError: () => toast.error("Failed to update profile")
+    onError: (error: Error) => toast.error(error.message || "Failed to update profile")
   });
 
   const handleUpdateSettings = (e: React.FormEvent) => {
@@ -63,8 +63,39 @@ const Settings = () => {
 
   if (settingsLoading || profileLoading) {
     return (
-      <div className="flex h-[50vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-accent" />
+      <div className="space-y-6 sm:space-y-8 pb-10 animate-pulse">
+        <div className="space-y-2">
+          <div className="h-7 w-32 rounded-xl bg-muted" />
+          <div className="h-4 w-80 rounded-lg bg-muted" />
+        </div>
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="rounded-2xl bg-card p-5 sm:p-6 shadow-clay-sm space-y-4">
+              <div className="h-5 w-36 rounded bg-muted" />
+              {[...Array(3)].map((_, j) => (
+                <div key={j} className="space-y-1.5">
+                  <div className="h-3 w-24 rounded bg-muted" />
+                  <div className="h-10 w-full rounded-xl bg-muted" />
+                </div>
+              ))}
+              <div className="h-10 w-28 rounded-xl bg-muted mt-2" />
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="rounded-2xl bg-card p-5 sm:p-6 shadow-clay-sm space-y-4">
+              <div className="h-5 w-40 rounded bg-muted" />
+              {[...Array(4)].map((_, j) => (
+                <div key={j} className="space-y-1.5">
+                  <div className="h-3 w-20 rounded bg-muted" />
+                  <div className="h-10 w-full rounded-xl bg-muted" />
+                </div>
+              ))}
+              <div className="h-10 w-28 rounded-xl bg-muted mt-2" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

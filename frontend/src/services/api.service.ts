@@ -4,6 +4,25 @@ export interface AuthUser {
   email: string;
 }
 
+export interface LoginRequest {
+  email: string;
+  password?: string;
+}
+
+export interface RegisterRequest {
+  name: string;
+  email: string;
+  password?: string;
+}
+
+export interface ApiInvoiceItem {
+  id?: string;
+  invoiceId?: string;
+  description: string;
+  quantity: number;
+  rate: number;
+}
+
 export interface ApiInvoice {
   id: string;
   invoiceNumber: string;
@@ -13,10 +32,13 @@ export interface ApiInvoice {
   issueDate: string;
   dueDate: string;
   status: "Draft" | "Sent" | "Paid" | "Overdue";
+  subtotal: number;
+  tax: number;
   totalAmount: number;
   paidAmount: number;
   notes?: string;
   customer?: { id: string; name: string };
+  items?: ApiInvoiceItem[];
   createdAt: string;
 }
 
@@ -65,6 +87,28 @@ export interface ApiCustomer {
   };
 }
 
+export interface CreateInvoiceRequest {
+  invoiceNumber: string;
+  customerName: string;
+  customerEmail: string;
+  customerAddress: string;
+  issueDate: string | Date;
+  dueDate: string | Date;
+  notes?: string;
+  items: Omit<ApiInvoiceItem, 'id' | 'invoiceId'>[];
+  subtotal: number;
+  tax: number;
+  totalAmount: number;
+}
+
+export interface CreateCustomerRequest {
+  name: string;
+  email: string;
+  phone?: string;
+  company?: string;
+  address?: string;
+}
+
 export interface ApiDashboardOverview {
   overview: {
     totalRevenue: number;
@@ -74,6 +118,13 @@ export interface ApiDashboardOverview {
     currency: string;
   };
   recentInvoices: ApiInvoice[];
+  monthlyRevenue: {
+    total: number;
+    collected: number;
+    pending: number;
+    overdue: number;
+    currency: string;
+  };
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
@@ -88,7 +139,7 @@ const getHeaders = () => {
 
 export const apiService = {
   // Auth
-  async login(data: any): Promise<{ token: string; user: AuthUser }> {
+  async login(data: LoginRequest): Promise<{ token: string; user: AuthUser }> {
     const res = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -101,7 +152,7 @@ export const apiService = {
     return res.json();
   },
 
-  async register(data: any): Promise<{ token: string; user: AuthUser }> {
+  async register(data: RegisterRequest): Promise<{ token: string; user: AuthUser }> {
     const res = await fetch(`${API_BASE_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -121,13 +172,13 @@ export const apiService = {
     return res.json();
   },
 
-  async getInvoice(id: string): Promise<ApiInvoice & { items: any[], payments: ApiPayment[] }> {
+  async getInvoice(id: string): Promise<ApiInvoice & { items: ApiInvoiceItem[], payments: ApiPayment[] }> {
     const res = await fetch(`${API_BASE_URL}/invoices/${id}`, { headers: getHeaders() });
     if (!res.ok) throw new Error('Failed to fetch invoice');
     return res.json();
   },
 
-  async createInvoice(data: any): Promise<ApiInvoice> {
+  async createInvoice(data: CreateInvoiceRequest): Promise<ApiInvoice> {
     const res = await fetch(`${API_BASE_URL}/invoices`, {
       method: 'POST',
       headers: getHeaders(),
@@ -201,7 +252,10 @@ export const apiService = {
       headers: getHeaders(),
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to update settings');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Failed to update settings');
+    }
     return res.json();
   },
 
@@ -225,7 +279,7 @@ export const apiService = {
     return res.json();
   },
 
-  async createCustomer(data: any): Promise<ApiCustomer> {
+  async createCustomer(data: CreateCustomerRequest): Promise<ApiCustomer> {
     const res = await fetch(`${API_BASE_URL}/customers`, {
       method: 'POST',
       headers: getHeaders(),
@@ -235,7 +289,7 @@ export const apiService = {
     return res.json();
   },
 
-  async updateCustomer(id: string, data: any): Promise<ApiCustomer> {
+  async updateCustomer(id: string, data: Partial<CreateCustomerRequest>): Promise<ApiCustomer> {
     const res = await fetch(`${API_BASE_URL}/customers/${id}`, {
       method: 'PUT',
       headers: getHeaders(),
@@ -251,5 +305,37 @@ export const apiService = {
       headers: getHeaders(),
     });
     if (!res.ok) throw new Error('Failed to delete customer');
+  },
+
+  // Public (no auth)
+  async getPublicInvoice(id: string): Promise<ApiInvoice & {
+    items: ApiInvoiceItem[];
+    payments: ApiPayment[];
+    company: {
+      name: string; email: string; phone: string;
+      address: string; logo: string | null; currency: string; taxRate: number;
+    }
+  }> {
+    const res = await fetch(`${API_BASE_URL}/invoices/public/${id}`);
+    if (!res.ok) throw new Error('Invoice not found');
+    return res.json();
+  },
+
+  async createPublicPayment(data: {
+    invoiceId: string;
+    amount: number;
+    paymentMethod: string;
+    notes?: string;
+  }): Promise<ApiPayment> {
+    const res = await fetch(`${API_BASE_URL}/payments/public`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Payment failed');
+    }
+    return res.json();
   },
 };

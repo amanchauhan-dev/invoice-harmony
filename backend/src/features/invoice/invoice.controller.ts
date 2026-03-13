@@ -65,5 +65,19 @@ export const invoiceController = {
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
+  },
+
+  async getPublicInvoice(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const invoice = await invoiceService.getPublicInvoiceData(id as string);
+      if (!invoice) {
+        res.status(404).json({ error: 'Invoice not found' });
+        return;
+      }
+      res.json(invoice);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
   }
 };

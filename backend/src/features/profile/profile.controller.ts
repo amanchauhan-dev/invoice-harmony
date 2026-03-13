@@ -22,9 +22,13 @@ export const profileController = {
       const userId = req.user!.userId;
 
       const validatedData = updateProfileSchema.parse(req.body);
+      
+      // Strip id and other potential conflicts
+      const { id, ...updateData } = validatedData as any;
+
       const user = await prisma.user.update({
         where: { id: userId },
-        data: validatedData,
+        data: updateData,
       });
       res.json(user);
     } catch (error) {

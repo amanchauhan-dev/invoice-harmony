@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Search, Loader2 } from "lucide-react";
+import { Search } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiService, ApiPayment } from "../services/api.service";
@@ -52,8 +52,44 @@ const Payments = () => {
         </div>
 
         {isLoading ? (
-          <div className="flex h-40 items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-accent" />
+          <div className="animate-pulse">
+            {/* Mobile skeleton */}
+            <div className="divide-y divide-border/50 md:hidden">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="h-3.5 w-28 rounded bg-muted" />
+                    <div className="h-3 w-36 rounded bg-muted" />
+                    <div className="h-3 w-24 rounded bg-muted" />
+                  </div>
+                  <div className="h-4 w-16 rounded bg-muted" />
+                </div>
+              ))}
+            </div>
+            {/* Desktop skeleton */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border/50">
+                    {[...Array(6)].map((_, i) => (
+                      <th key={i} className="px-6 py-3"><div className="h-3 w-16 rounded bg-muted" /></th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/30">
+                  {[...Array(5)].map((_, i) => (
+                    <tr key={i}>
+                      <td className="px-6 py-4"><div className="h-3.5 w-20 rounded bg-muted" /></td>
+                      <td className="px-6 py-4"><div className="h-3.5 w-28 rounded bg-muted" /></td>
+                      <td className="px-6 py-4"><div className="h-3.5 w-16 rounded bg-muted" /></td>
+                      <td className="px-6 py-4"><div className="h-6 w-20 rounded-full bg-muted" /></td>
+                      <td className="px-6 py-4"><div className="h-3.5 w-24 rounded bg-muted" /></td>
+                      <td className="px-6 py-4"><div className="h-3.5 w-20 rounded bg-muted" /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
           <>

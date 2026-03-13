@@ -4,6 +4,9 @@ import { authMiddleware } from '../../middlewares/auth.middleware.js';
 
 export const paymentRouter = Router();
 
+// Public route — no auth required
+paymentRouter.post('/public', paymentController.createPublicPayment);
+
 paymentRouter.use(authMiddleware);
 
 paymentRouter.post('/', paymentController.createPayment);

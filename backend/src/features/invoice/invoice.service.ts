@@ -1,8 +1,21 @@
 import { prisma } from '../../lib/prisma.js';
 
+const transformInvoice = (invoice: any) => {
+  if (!invoice) return null;
+  const { customer, ...rest } = invoice;
+  return {
+    ...rest,
+    customerName: customer?.name || rest.customerName || "",
+    customerEmail: customer?.email || rest.customerEmail || "",
+    customerAddress: customer?.address || rest.customerAddress || "",
+    // Keep the nested customer object for compatibility if needed
+    customer: customer || (rest.customerName ? { name: rest.customerName, email: rest.customerEmail } : null)
+  };
+};
+
 export const invoiceService = {
   async getInvoices(userId: string) {
-    return prisma.invoice.findMany({
+    const invoices = await prisma.invoice.findMany({
       where: { userId },
       include: {
         customer: {
@@ -15,10 +28,11 @@ export const invoiceService = {
       },
       orderBy: { createdAt: 'desc' }
     });
+    return invoices.map(transformInvoice);
   },
 
   async getInvoiceById(id: string, userId: string) {
-    return prisma.invoice.findFirst({
+    const invoice = await prisma.invoice.findFirst({
       where: { id, userId },
       include: {
         customer: true,
@@ -26,6 +40,7 @@ export const invoiceService = {
         payments: true
       }
     });
+    return transformInvoice(invoice);
   },
 
   async createInvoice(userId: string, data: any) {
@@ -47,7 +62,7 @@ export const invoiceService = {
       });
     }
 
-    return prisma.invoice.create({
+    const invoice = await prisma.invoice.create({
       data: {
         userId,
         customerId: customer.id,
@@ -72,6 +87,7 @@ export const invoiceService = {
         items: true
       }
     });
+    return transformInvoice(invoice);
   },
 
   async updateInvoiceStatus(id: string, status: string) {
@@ -87,7 +103,7 @@ export const invoiceService = {
 
     // Assuming we only update standard fields, skipping full relations replace for now
     const { invoiceNumber, issueDate, dueDate, notes, subtotal, tax, totalAmount, status } = data;
-    return prisma.invoice.update({
+    const invoice = await prisma.invoice.update({
       where: { id },
       data: {
         ...(invoiceNumber && { invoiceNumber }),
@@ -98,13 +114,53 @@ export const invoiceService = {
         ...(tax !== undefined && { tax }),
         ...(totalAmount !== undefined && { totalAmount }),
         ...(status && { status })
+      },
+      include: {
+        customer: true,
+        items: true
       }
     });
+    return transformInvoice(invoice);
   },
 
   async deleteInvoice(id: string, userId: string) {
     return prisma.invoice.deleteMany({
       where: { id, userId }
     });
+  },
+
+  async getPublicInvoiceData(id: string) {
+    const invoice = await prisma.invoice.findFirst({
+      where: { id },
+      include: {
+        customer: true,
+        items: true,
+        payments: true,
+        user: {
+          include: {
+            settings: true
+          }
+        }
+      }
+    });
+    if (!invoice) return null;
+
+    const { user, customer, ...rest } = invoice as any;
+    return {
+      ...rest,
+      customerName: customer?.name || "",
+      customerEmail: customer?.email || "",
+      customerAddress: customer?.address || "",
+      customer,
+      company: {
+        name: user?.settings?.companyName || user?.name || "InvoiceHarmony",
+        email: user?.settings?.companyEmail || user?.email || "",
+        phone: user?.settings?.companyPhone || "",
+        address: user?.settings?.companyAddress || "",
+        logo: user?.settings?.companyLogo || null,
+        currency: user?.settings?.currency || "USD",
+        taxRate: user?.settings?.taxRate || 0,
+      }
+    };
   }
 };

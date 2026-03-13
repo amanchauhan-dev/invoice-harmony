@@ -7,13 +7,12 @@ import {
   TrendingUp,
   ArrowUpRight,
   ArrowDownRight,
-  Loader2,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { apiService, ApiDashboardOverview } from "../services/api.service";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/use-auth";
 
 const formatCurrency = (amount: number, currency: string = "USD") => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
@@ -28,8 +27,46 @@ const Dashboard = () => {
 
   if (isLoading) {
     return (
-      <div className="flex h-[50vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-accent" />
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8 animate-pulse">
+        {/* Header skeleton */}
+        <div className="space-y-2">
+          <div className="h-8 w-48 rounded-xl bg-muted" />
+          <div className="h-4 w-72 rounded-lg bg-muted" />
+        </div>
+        {/* Stat cards skeleton */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="rounded-2xl bg-card p-4 sm:p-5 shadow-clay-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="h-3 w-24 rounded bg-muted" />
+                <div className="h-10 w-10 rounded-xl bg-muted" />
+              </div>
+              <div className="h-7 w-32 rounded-lg bg-muted" />
+              <div className="h-3 w-16 rounded bg-muted" />
+            </div>
+          ))}
+        </div>
+        {/* Chart skeleton */}
+        <div className="rounded-2xl bg-card p-5 sm:p-6 shadow-clay-sm">
+          <div className="h-4 w-40 rounded bg-muted mb-6" />
+          <div className="h-48 w-full rounded-xl bg-muted" />
+        </div>
+        {/* Recent invoices skeleton */}
+        <div className="rounded-2xl bg-card shadow-clay-sm overflow-hidden">
+          <div className="border-b border-border/50 px-5 py-4">
+            <div className="h-4 w-36 rounded bg-muted" />
+          </div>
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="flex items-center justify-between px-5 py-4 border-b border-border/30">
+              <div className="space-y-1.5">
+                <div className="h-3.5 w-28 rounded bg-muted" />
+                <div className="h-3 w-20 rounded bg-muted" />
+              </div>
+              <div className="h-6 w-16 rounded-full bg-muted" />
+              <div className="h-4 w-16 rounded bg-muted" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -161,41 +198,53 @@ const Dashboard = () => {
           transition={{ delay: 0.45, duration: 0.35 }}
           className="rounded-2xl bg-card shadow-clay"
         >
-          <div className="px-6 py-4">
+          <div className="px-6 py-4 border-b border-border/50">
             <h2 className="font-heading text-base font-semibold text-foreground">Revenue Overview</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">{format(new Date(), "MMMM yyyy")}</p>
           </div>
-          <div className="space-y-5 p-6 pt-0">
+          <div className="space-y-5 p-6">
+            {/* This Month total */}
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-success/10 shadow-clay-sm">
                 <TrendingUp className="h-5 w-5 text-success" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">This Month</p>
-                <p className="font-heading text-lg font-bold text-foreground">$12,480.00</p>
+                <p className="text-xs text-muted-foreground">This Month Total</p>
+                <p className="font-heading text-lg font-bold text-foreground">
+                  {formatCurrency(data.monthlyRevenue.total, data.monthlyRevenue.currency)}
+                </p>
               </div>
             </div>
-            <div className="space-y-3">
-              {[
-                { label: "Collected", value: "$9,230", pct: 74 },
-                { label: "Pending", value: "$2,150", pct: 17 },
-                { label: "Overdue", value: "$1,100", pct: 9 },
-              ].map((item) => (
-                <div key={item.label}>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">{item.label}</span>
-                    <span className="font-medium text-foreground">{item.value}</span>
-                  </div>
-                  <div className="mt-1.5 h-2 rounded-full bg-background shadow-clay-inset">
-                    <div
-                      className={`h-2 rounded-full ${
-                        item.label === "Collected" ? "bg-success" : item.label === "Pending" ? "bg-warning" : "bg-destructive"
-                      }`}
-                      style={{ width: `${item.pct}%` }}
-                    />
-                  </div>
+
+            {/* Breakdown bars */}
+            {(() => {
+              const total = data.monthlyRevenue.total || 1; // avoid div-by-zero
+              const bars = [
+                { label: "Collected",  value: data.monthlyRevenue.collected, color: "bg-success" },
+                { label: "Pending",    value: data.monthlyRevenue.pending,   color: "bg-warning" },
+                { label: "Overdue",    value: data.monthlyRevenue.overdue,   color: "bg-destructive" },
+              ];
+              return (
+                <div className="space-y-3">
+                  {bars.map((item) => (
+                    <div key={item.label}>
+                      <div className="flex justify-between text-xs mb-1.5">
+                        <span className="text-muted-foreground">{item.label}</span>
+                        <span className="font-medium text-foreground">
+                          {formatCurrency(item.value, data.monthlyRevenue.currency)}
+                        </span>
+                      </div>
+                      <div className="h-2 rounded-full bg-background shadow-clay-inset">
+                        <div
+                          className={`h-2 rounded-full ${item.color} transition-all duration-700`}
+                          style={{ width: `${Math.min(100, Math.round((item.value / total) * 100))}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              );
+            })()}
           </div>
         </motion.div>
       </div>

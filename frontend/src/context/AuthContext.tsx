@@ -1,39 +1,26 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-
-interface AuthUser {
-  id: string;
-  name: string;
-  email: string;
-}
-
-interface AuthContextType {
-  user: AuthUser | null;
-  token: string | null;
-  isAuthenticated: boolean;
-  login: (token: string, user: AuthUser) => void;
-  logout: () => void;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+import React, { useState, useEffect, ReactNode } from 'react';
+import { AuthContext, AuthUser } from '../hooks/use-auth';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true); // true until localStorage is read
 
   useEffect(() => {
-    // Check localStorage on mount
+    // Read localStorage synchronously on mount
     const storedToken = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
-    
+
     if (storedToken && storedUser) {
-      setToken(storedToken);
       try {
+        setToken(storedToken);
         setUser(JSON.parse(storedUser));
-      } catch (e) {
+      } catch {
         localStorage.removeItem('user');
         localStorage.removeItem('token');
       }
     }
+    setIsLoading(false); // Done — ProtectedRoute can now safely check auth
   }, []);
 
   const login = (newToken: string, newUser: AuthUser) => {
@@ -55,18 +42,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       token,
       isAuthenticated: !!token,
+      isLoading,
       login,
-      logout
+      logout,
     }}>
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 }

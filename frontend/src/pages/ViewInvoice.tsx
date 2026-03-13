@@ -12,17 +12,22 @@ import {
   DollarSign,
   History,
   AlertCircle,
+  QrCode,
 } from "lucide-react";
 import { apiService, ApiInvoice, ApiPayment } from "../services/api.service";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Dialog, DialogContent, DialogTitle, DialogHeader } from "@/components/ui/dialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { QRCodeSVG } from "qrcode.react";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 
 const ViewInvoice = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const queryClient = useQueryClient();
+  const invoiceRef = useRef<HTMLDivElement>(null);
   
   const [scale, setScale] = useState(1);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -32,7 +37,6 @@ const ViewInvoice = () => {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Bank Transfer");
   const [paymentNote, setPaymentNote] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
 
   // Fetch invoice data
   const { data: invoice, isLoading } = useQuery({
@@ -63,14 +67,37 @@ const ViewInvoice = () => {
     window.print();
   };
 
+  const handleDownloadPDF = async () => {
+    if (!invoiceRef.current) return;
+    toast.info("Generating invoice PDF…");
+    try {
+      const canvas = await html2canvas(invoiceRef.current, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgRatio = canvas.width / canvas.height;
+      const pdfImgWidth = pageWidth;
+      const pdfImgHeight = pdfImgWidth / imgRatio;
+      let y = 0;
+      while (y < pdfImgHeight) {
+        if (y > 0) pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, -y, pdfImgWidth, pdfImgHeight);
+        y += pageHeight;
+      }
+      pdf.save(`invoice-${invoice?.invoiceNumber || id}.pdf`);
+      toast.success("Invoice downloaded!");
+    } catch (e) {
+      toast.error("Failed to generate PDF");
+    }
+  };
+
   const recordPaymentMutation = useMutation({
     mutationFn: (payload: { invoiceId: string; amount: number; paymentMethod: string; notes?: string }) => apiService.createPayment(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', id] });
-      // Also invalidate payments list and dashboard
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      
       toast.success("Payment recorded successfully");
       setShowPaymentModal(false);
     },
@@ -82,7 +109,6 @@ const ViewInvoice = () => {
   const handleRecordPayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!invoice || !id) return;
-    
     recordPaymentMutation.mutate({
       invoiceId: id,
       amount: parseFloat(paymentAmount),
@@ -93,13 +119,89 @@ const ViewInvoice = () => {
 
   if (isLoading) {
     return (
-      <div className="flex h-[80vh] items-center justify-center">
-        <Loader2 className="h-10 w-10 animate-spin text-accent" />
+      <div className="min-h-[calc(100vh-64px)] overflow-y-auto bg-muted/30 pb-20 pt-6 sm:pt-8">
+        {/* Action bar skeleton */}
+        <div className="mx-auto max-w-[21cm] mb-6 flex items-center justify-between px-4 sm:px-6 animate-pulse">
+          <div className="h-9 w-36 rounded-xl bg-muted" />
+          <div className="flex gap-2">
+            <div className="h-9 w-32 rounded-xl bg-muted" />
+            <div className="h-9 w-28 rounded-xl bg-muted" />
+            <div className="h-9 w-20 rounded-xl bg-muted" />
+          </div>
+        </div>
+        {/* Invoice paper skeleton */}
+        <div className="flex justify-center px-4">
+          <div className="w-full max-w-[800px] rounded-2xl bg-white shadow-2xl p-10 sm:p-12 space-y-8 animate-pulse">
+            {/* Header */}
+            <div className="flex justify-between items-start">
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-xl bg-gray-200" />
+                  <div className="h-6 w-40 rounded-lg bg-gray-200" />
+                </div>
+                <div className="space-y-1.5">
+                  <div className="h-3 w-32 rounded bg-gray-100" />
+                  <div className="h-3 w-40 rounded bg-gray-100" />
+                </div>
+              </div>
+              <div className="text-right space-y-2">
+                <div className="h-12 w-28 rounded-xl bg-gray-100" />
+                <div className="h-4 w-24 rounded bg-gray-200" />
+              </div>
+            </div>
+            <div className="h-px bg-gray-100" />
+            {/* Bill to + dates */}
+            <div className="grid grid-cols-2 gap-10">
+              <div className="space-y-2">
+                <div className="h-3 w-16 rounded bg-gray-200" />
+                <div className="h-5 w-36 rounded bg-gray-200" />
+                <div className="h-3 w-40 rounded bg-gray-100" />
+                <div className="h-3 w-32 rounded bg-gray-100" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="space-y-1.5">
+                    <div className="h-3 w-16 rounded bg-gray-200" />
+                    <div className="h-4 w-24 rounded bg-gray-100" />
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Items */}
+            <div className="space-y-3">
+              <div className="h-px bg-gray-100" />
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="flex items-center justify-between py-2">
+                  <div className="h-4 w-64 rounded bg-gray-100" />
+                  <div className="flex gap-8">
+                    <div className="h-4 w-8 rounded bg-gray-100" />
+                    <div className="h-4 w-16 rounded bg-gray-100" />
+                    <div className="h-4 w-16 rounded bg-gray-100" />
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* QR + totals */}
+            <div className="flex justify-between pt-6 border-t border-gray-100">
+              <div className="h-24 w-24 rounded-xl bg-gray-200" />
+              <div className="space-y-2">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="flex justify-between gap-20">
+                    <div className="h-4 w-24 rounded bg-gray-100" />
+                    <div className="h-4 w-16 rounded bg-gray-100" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (!invoice) return null;
+
+  const paymentUrl = `${window.location.origin}/pay/${id}`;
 
   return (
     <div className="min-h-[calc(100vh-64px)] overflow-y-auto bg-muted/30 pb-20 pt-6 sm:pt-8 print:bg-white print:p-0 print:pb-0 scrollbar-hide">
@@ -112,7 +214,7 @@ const ViewInvoice = () => {
           <ArrowLeft className="h-4 w-4" />
           <span>Back to Invoices</span>
         </button>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           {invoice.status !== "Paid" && (
             <button
               onClick={() => setShowPaymentModal(true)}
@@ -122,6 +224,13 @@ const ViewInvoice = () => {
               Record Payment
             </button>
           )}
+          <button
+            onClick={handleDownloadPDF}
+            className="flex items-center gap-2 rounded-xl bg-card px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-medium text-foreground shadow-clay-sm transition-all hover:shadow-clay active:scale-95"
+          >
+            <Download className="h-4 w-4" />
+            Download PDF
+          </button>
           <button
             onClick={handlePrint}
             className="flex items-center gap-2 rounded-xl bg-primary px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-medium text-primary-foreground shadow-clay-sm transition-all hover:opacity-90 active:scale-95"
@@ -134,6 +243,7 @@ const ViewInvoice = () => {
 
       <div ref={containerRef} className="flex flex-col items-center justify-center overflow-x-hidden pb-10 scrollbar-hide px-4 sm:px-6 w-full">
         <motion.div
+          ref={invoiceRef}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           style={{
@@ -215,7 +325,7 @@ const ViewInvoice = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {invoice.items.map((item, i) => (
+                  {invoice.items?.map((item, i) => (
                     <tr key={i}>
                       <td className="py-6 pr-4">
                         <p className="font-bold text-gray-800">{item.description}</p>
@@ -236,11 +346,11 @@ const ViewInvoice = () => {
                   <History className="h-4 w-4 text-primary" />
                   <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">Payment History</h3>
                 </div>
-                {invoice.payments.length === 0 ? (
+                {invoice.payments?.length === 0 ? (
                   <p className="text-xs text-gray-400 italic">No payments recorded yet.</p>
                 ) : (
                   <div className="space-y-3">
-                    {invoice.payments.map((p, i) => (
+                    {invoice.payments?.map((p, i) => (
                       <div key={i} className="flex justify-between items-center text-xs bg-gray-50 p-2 rounded-lg">
                         <div>
                           <p className="font-bold text-gray-700">{p.paymentMethod}</p>
@@ -276,6 +386,28 @@ const ViewInvoice = () => {
                 </div>
               </div>
             )}
+
+            {/* QR Code Section */}
+            <div className="mt-10 flex items-center gap-6 border-t border-gray-100 pt-8">
+              <div className="shrink-0">
+                <QRCodeSVG
+                  value={paymentUrl}
+                  size={96}
+                  bgColor="#ffffff"
+                  fgColor="#1e293b"
+                  level="M"
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-widest text-gray-400">
+                  <QrCode className="h-3 w-3" /> Pay Online
+                </div>
+                <p className="text-xs text-gray-500 max-w-xs">
+                  Scan the QR code or visit the link below to pay this invoice securely online.
+                </p>
+                <p className="text-[11px] text-primary font-medium break-all">{paymentUrl}</p>
+              </div>
+            </div>
           </div>
         </motion.div>
       </div>
