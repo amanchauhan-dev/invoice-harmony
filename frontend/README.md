@@ -1,73 +1,391 @@
-# Welcome to your Lovable project
+# Invoice Harmony — Frontend SPA
 
-## Project info
+Frontend interface for **Invoice Harmony**, a SaaS platform for managing invoices, balances, payments, analytics, and AI-driven financial assistance.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+This application provides a modern dashboard-based user interface.
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+# Overview
 
-**Use Lovable**
+The frontend is built using:
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+* **React**
+* **TypeScript**
+* **React Router**
+* **Context API**
+* **Axios / Fetch HTTP client**
 
-Changes made via Lovable will be committed automatically to this repo.
+Architecture follows a **layout-driven SPA pattern**.
 
-**Use your preferred IDE**
+---
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+# Core Responsibilities
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+Frontend handles:
 
-Follow these steps:
+* User authentication UI
+* Dashboard visualization
+* Invoice management
+* Customer management
+* Payments tracking
+* Reports display
+* Settings management
+* Sidebar navigation
+* AI chat interface
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+---
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Project Structure
+![Architecture Flow Chart](/frontend.png)
 
-# Step 3: Install the necessary dependencies.
-npm i
+```
+frontend/
+│
+├── main.tsx                # Application entry
+├── App.tsx                 # Router shell
+│
+├── layouts/
+│   └── AppLayout.tsx
+│
+├── components/
+│   ├── AppSidebar.tsx
+│   └── ProtectedRoute.tsx
+│
+├── pages/
+│   ├── Auth.tsx
+│   ├── Dashboard.tsx
+│   ├── Customers.tsx
+│   ├── Invoices.tsx
+│   ├── Payments.tsx
+│   ├── Reports.tsx
+│   ├── Settings.tsx
+│
+├── context/
+│   └── AuthContext.tsx
+│
+├── services/
+│   └── api.service.ts
+```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+---
+
+# Application Flow
+
+1. `main.tsx` boots the app
+2. `App.tsx` defines routing
+3. `ProtectedRoute` checks authentication
+4. `AppLayout` loads UI layout
+5. Sidebar controls navigation
+6. Pages call backend APIs
+7. UI updates dynamically
+
+---
+
+# Routing Flow
+
+Public route:
+
+```
+/auth
+```
+
+Protected routes:
+
+```
+/dashboard
+/customers
+/invoices
+/payments
+/reports
+/settings
+```
+
+Authentication is validated before loading protected pages.
+
+---
+
+# Layout System
+
+## AppLayout
+
+Main UI shell:
+
+Contains:
+
+* Sidebar navigation
+* Header area
+* Page content container
+
+---
+
+## Sidebar Navigation
+
+Provides links to:
+
+```
+Dashboard
+Customers
+Invoices
+Payments
+Reports
+Settings
+AI Chat
+```
+
+---
+
+# Pages
+
+## Auth Page
+
+Handles:
+
+* Login
+* Registration
+
+File:
+
+```
+Auth.tsx
+```
+
+---
+
+## Dashboard Page
+
+Displays:
+
+* Revenue overview
+* Outstanding balances
+* Payment trends
+
+File:
+
+```
+Dashboard.tsx
+```
+
+---
+
+## Customers Page
+
+Manages:
+
+* Customer list
+* Customer details
+
+File:
+
+```
+Customers.tsx
+```
+
+---
+
+## Invoices Page
+
+Manages:
+
+* Invoice creation
+* Invoice editing
+* Invoice tracking
+
+File:
+
+```
+Invoices.tsx
+```
+
+---
+
+## Payments Page
+
+Tracks:
+
+* Incoming payments
+* Payment history
+
+File:
+
+```
+Payments.tsx
+```
+
+---
+
+## Reports Page
+
+Displays:
+
+* Earnings reports
+* Monthly summaries
+* Financial analytics
+
+File:
+
+```
+Reports.tsx
+```
+
+---
+
+## Settings Page
+
+Allows:
+
+* Profile settings
+* Business settings
+* Preferences
+
+File:
+
+```
+Settings.tsx
+```
+
+---
+
+# Authentication Flow
+
+Uses **AuthContext**.
+
+Responsibilities:
+
+* Store user session
+* Handle login/logout
+* Protect routes
+
+---
+
+# API Communication
+
+All requests pass through:
+
+```
+api.service.ts
+```
+
+Handles:
+
+* Base URL config
+* Token injection
+* Error handling
+
+Example:
+
+```
+GET /customers
+POST /invoices
+GET /dashboard/summary
+```
+
+---
+
+# State Management
+
+Uses:
+
+```
+React Context API
+```
+
+Stores:
+
+* Auth state
+* User session
+* Token
+
+---
+
+# Environment Variables
+
+```
+VITE_API_URL=http://localhost:5000
+```
+
+---
+
+# Installation
+
+```
+git clone <repo>
+cd frontend
+npm install
+```
+
+---
+
+# Running Development Server
+
+```
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+---
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+# Production Build
 
-**Use GitHub Codespaces**
+```
+npm run build
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+---
 
-## What technologies are used for this project?
+# UI Features
 
-This project is built with:
+Includes:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+* Sidebar navigation
+* Protected routing
+* Dashboard analytics
+* Real-time API updates
+* Responsive layout
+* AI assistant panel
 
-## How can I deploy this project?
+---
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+# Error Handling
 
-## Can I connect a custom domain to my Lovable project?
+Standard API error responses are displayed using:
 
-Yes, you can!
+* Toast notifications
+* Inline messages
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+---
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+# Security
+
+Includes:
+
+* Token-based authentication
+* Route guards
+* Session validation
+
+---
+
+# Deployment
+
+Recommended:
+
+* Vercel
+* Netlify
+* Docker-based hosting
+
+---
+
+# Future Improvements
+
+Planned:
+
+* Dark mode
+* Export invoices
+* Real-time notifications
+* AI financial insights
+* Offline caching
+
+---
+
+# License
+
+Private SaaS project — not for public redistribution.
